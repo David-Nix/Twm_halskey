@@ -1,0 +1,97 @@
+[
+  {
+    "name": "GENERAL INFO MESSAGE",
+    "id": "gen_info_night",
+    "text": "<strong>GENERAL INFORMATION</strong>\n<strong>PLEASE READ THROUGH</strong>\n\n🏳️ If you're new and unsure, fear not! Getting started with us is a breeze. Just adhere to these two straightforward steps:\n\n<strong>⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️</strong>\n\n<a href='https://shorturl.at/cehnV'>1️⃣ CREATE ACCOUNT HERE</a>\n👉 Swiftly open your trading account with our top-rated broker and receive $50,000 in complimentary funds to test our operations with absolutely no financial risk.\n\n<a href='https://telegra.ph/STRICT-INSTRUCTIONS-ON-HOW-TO-TRADE-SUCCESSFULLY-02-09'>2️⃣ INSTRUCTIONS HERE</a>\n👇 Watch our well detailed video tutorial to learn how to deposit funds and participate in our trading sessions.\n\n<strong>HAPPY TRADING 🤗</strong>",
+    "image": "/brand/night_session.jpg",
+    "replyMarkup": {
+      "inline_keyboard": [
+        [{ "text": "CREATE AN ACCOUNT HERE", "url": "https://shorturl.at/cehnV" }],
+        [{ "text": "INSTRUCTIONS HERE", "url": "https://telegra.ph/STRICT-INSTRUCTIONS-ON-HOW-TO-TRADE-SUCCESSFULLY-02-09" }],
+        [{ "text": "FREQUENTLY ASKED QUESTIONS", "url": "https://telegra.ph/TRADE-WITH-MATTHEW-SUPPORT-03-12" }]
+      ]
+    }
+  },
+  {
+    "name": "GENERAL INFO MESSAGE",
+    "id": "gen_info_morning",
+    "text": "<strong>GENERAL INFORMATION</strong>\n<strong>PLEASE READ THROUGH</strong>\n\n🏳️ If you're new and unsure, fear not! Getting started with us is a breeze. Just adhere to these two straightforward steps:\n\n<strong>⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️</strong>\n\n<a href='https://shorturl.at/cehnV'>1️⃣ CREATE ACCOUNT HERE</a>\n👉 Swiftly open your trading account with our top-rated broker and receive $50,000 in complimentary funds to test our operations with absolutely no financial risk.\n\n<a href='https://telegra.ph/STRICT-INSTRUCTIONS-ON-HOW-TO-TRADE-SUCCESSFULLY-02-09'>2️⃣ INSTRUCTIONS HERE</a>\n👇 Watch our well detailed video tutorial to learn how to deposit funds and participate in our trading sessions.\n\n<strong>HAPPY TRADING 🤗</strong>",
+    "image": "/brand/morning_session.jpg",
+    "replyMarkup": {
+      "inline_keyboard": [
+        [{ "text": "CREATE AN ACCOUNT HERE", "url": "https://shorturl.at/cehnV" }],
+        [{ "text": "INSTRUCTIONS HERE", "url": "https://telegra.ph/STRICT-INSTRUCTIONS-ON-HOW-TO-TRADE-SUCCESSFULLY-02-09" }],
+        [{ "text": "FREQUENTLY ASKED QUESTIONS", "url": "https://telegra.ph/TRADE-WITH-MATTHEW-SUPPORT-03-12" }]
+      ]
+    }
+  },
+  {
+    "name": "GENERAL INFO MESSAGE",
+    "id": "gen_info_noon",
+    "text": "<strong>GENERAL INFORMATION</strong>\n<strong>PLEASE READ THROUGH</strong>\n\n🏳️ If you're new and unsure, fear not! Getting started with us is a breeze. Just adhere to these two straightforward steps:\n\n<strong>⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️⬇️</strong>\n\n<a href='https://shorturl.at/cehnV'>1️⃣ CREATE ACCOUNT HERE</a>\n👉 Swiftly open your trading account with our top-rated broker and receive $50,000 in complimentary funds to test our operations with absolutely no financial risk.\n\n<a href='https://telegra.ph/STRICT-INSTRUCTIONS-ON-HOW-TO-TRADE-SUCCESSFULLY-02-09'>2️⃣ INSTRUCTIONS HERE</a>\n👇 Watch our well detailed video tutorial to learn how to deposit funds and participate in our trading sessions.\n\n<strong>HAPPY TRADING 🤗</strong>",
+    "image": "/brand/afternoon_session.jpg",
+    "replyMarkup": {
+      "inline_keyboard": [
+        [{ "text": "CREATE AN ACCOUNT HERE", "url": "https://shorturl.at/cehnV" }],
+        [{ "text": "INSTRUCTIONS HERE", "url": "https://telegra.ph/STRICT-INSTRUCTIONS-ON-HOW-TO-TRADE-SUCCESSFULLY-02-09" }],
+        [{ "text": "FREQUENTLY ASKED QUESTIONS", "url": "https://telegra.ph/TRADE-WITH-MATTHEW-SUPPORT-03-12" }]
+      ]
+    }
+  },
+  {
+    "name": "VIDEO INTRODUCTION MESSAGE",
+    "id": "vid_instruct",
+    "text": "📣📣📣📣📣📣📣📣📣📣📣\n\n<strong>WATCH OUR DETAILED VIDEO TO GET STARTED IMMEDIATELY</strong>\n\n<strong>THEN REGISTER BELOW!!! ⬇️</strong>",
+    "video": {
+      "width": 622,
+      "height": 1280,
+      "path": "/brand/TWM_Video_Instructions.mp4"
+    },
+    "replyMarkup": {
+      "inline_keyboard": [
+        [{ "text": "CREATE AN ACCOUNT HERE", "url": "https://shorturl.at/cehnV" }],
+        [{ "text": "OPEN BROKER HERE", "url": "https://shorturl.at/cehnV" }],
+        [{ "text": "CONTACT SUPPORT HERE", "url": "https://t.me/twmsupports" }]
+      ]
+    }
+  },
+  {
+    "name": "OVERNIGHT GET READY MESSAGE",
+    "id": "overnight_get_ready",
+    "text": "<strong>GET READY!!! 🤗🤗🤗🤗🤗</strong>\n\n<strong>OVERNIGHT SESSION STARTING IN 20 MINUTES !!!</strong>\n\n<strong>HOW TO PARTICIPATE IN OUR FREE WIN TRADES </strong>\n\n1️⃣ If you don't yet have a broker account: Quickly register through the link below.\n\n<a href='https://shorturl.at/cehnV'>💻 CREATE ACCOUNT HERE 👈</a>\n\n2️⃣ If you already have an account: Access your broker via the link below and be ready to act.\n\n<a href='https://shorturl.at/cehnV'>📲 OPEN BROKER HERE</a>\n\n<strong>🙏We thank you for your attention and wish you success in your trading with us </strong>",
+    "image": "/brand/GET_READY.jpg",
+    "replyMarkup": {
+      "inline_keyboard": [
+        [{ "text": "CREATE AN ACCOUNT HERE", "url": "https://shorturl.at/cehnV" }],
+        [{ "text": "OPEN BROKER HERE", "url": "https://shorturl.at/cehnV" }],
+        [{ "text": "CONTACT SUPPORT HERE", "url": "https://t.me/twmsupports" }]
+      ]
+    }
+  },
+  {
+    "name": "MORNING GET READY MESSAGE",
+    "id": "morning_get_ready",
+    "text": "<strong>GET READY!!! 🤗🤗🤗🤗🤗</strong>\n\n<strong>MORNING SESSION STARTING IN 20 MINUTES !!!</strong>\n\n<strong>HOW TO PARTICIPATE IN OUR FREE WIN TRADES </strong>\n\n1️⃣ If you don't yet have a broker account: Quickly register through the link below.\n\n<a href='https://shorturl.at/cehnV'>💻 CREATE ACCOUNT HERE 👈</a>\n\n2️⃣ If you already have an account: Access your broker via the link below and be ready to act.\n\n<a href='https://shorturl.at/cehnV'>📲 OPEN BROKER HERE</a>\n\n<strong>🙏We thank you for your attention and wish you success in your trading with us </strong>",
+    "image": "/brand/GET_READY.jpg",
+    "replyMarkup": {
+      "inline_keyboard": [
+        [{ "text": "CREATE AN ACCOUNT HERE", "url": "https://shorturl.at/cehnV" }],
+        [{ "text": "OPEN BROKER HERE", "url": "https://shorturl.at/cehnV" }],
+        [{ "text": "CONTACT SUPPORT HERE", "url": "https://t.me/twmsupports" }]
+      ]
+    }
+  },
+  {
+    "name": "AFTERNOON GET READY MESSAGE",
+    "id": "afternoon_get_ready",
+    "text": "<strong>GET READY!!! 🤗🤗🤗🤗🤗</strong>\n\n<strong>AFTERNOON SESSION STARTING IN 20 MINUTES !!!</strong>\n\n<strong>HOW TO PARTICIPATE IN OUR FREE WIN TRADES </strong>\n\n1️⃣ If you don't yet have a broker account: Quickly register through the link below.\n\n<a href='https://shorturl.at/cehnV'>💻 CREATE ACCOUNT HERE 👈</a>\n\n2️⃣ If you already have an account: Access your broker via the link below and be ready to act.\n\n<a href='https://shorturl.at/cehnV'>📲 OPEN BROKER HERE</a>\n\n<strong>🙏We thank you for your attention and wish you success in your trading with us </strong>",
+    "image": "/brand/GET_READY.jpg",
+    "replyMarkup": {
+      "inline_keyboard": [
+        [{ "text": "CREATE AN ACCOUNT HERE", "url": "https://shorturl.at/cehnV" }],
+        [{ "text": "OPEN BROKER HERE", "url": "https://shorturl.at/cehnV" }],
+        [{ "text": "CONTACT SUPPORT HERE", "url": "https://t.me/twmsupports" }]
+      ]
+    }
+  }
+]
