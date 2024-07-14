@@ -10,7 +10,7 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["*.ts"],
+  "include": ["./typescript/*.ts"],
   "exclude": ["node_modules"]
 }
   
