@@ -172,7 +172,14 @@ class ClimaxSignal {
             direction: "",
             lastStep: "pairs_0"
         };
-        this.History = [];
+        this.History = [
+            {
+                dateStamp: "",
+                pair: "🇺🇸 USD / BRL 🇧🇷 (OTC)",
+                direction: "🟩 HIGHER",
+                result: ""
+            }
+        ];
         this.CurrencyPairs = {
             text: "Choose a currency pair\n\nIf it's not here (almost impossible ;)...), choose a closely similar one and edit the post after i send it to the channel.\n\n",
             step0: [
@@ -1125,7 +1132,7 @@ bot.onText(/\/endsession/, (msg) => {
     var _a;
     const presentSession = botManager.getPresentSession();
     const chatId = (_a = msg.from) === null || _a === void 0 ? void 0 : _a.id;
-    handleSessionEnd("MORNING", chatId, true);
+    handleSessionEnd(presentSession, chatId, true);
 });
 app.get("/", (req, res) => {
     res.send("Halskey_TWM v1.0.0 is running...");

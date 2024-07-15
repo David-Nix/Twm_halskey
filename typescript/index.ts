@@ -49,7 +49,7 @@ const __dirname = dirname(__filename);
 
 const app: Express = express();
 const port: number = Number(process.env.PORT) || 3000;
-// app.use("/media/imgs", express.static(join(__dirname, "../media/imgs")));
+// app.use("/media/imgs", express.static(join(__dirname, "./media/imgs")));
 
 const token: string | undefined = process.env.BOT_TOKEN;
 
@@ -76,9 +76,9 @@ const authorize = (chatId: ChatId): boolean => {
 }
 
 const DATABASE = {
-  POSTS: join(__dirname, "../database/posts.json"),
-  HISTORY: join(__dirname, "../database/history.json"),
-  CRONS: join(__dirname, "../database/crons.json"),
+  POSTS: join(__dirname, "./database/posts.json"),
+  HISTORY: join(__dirname, "./database/history.json"),
+  CRONS: join(__dirname, "./database/crons.json"),
 };
 
 const downloadAndSavePhoto = async ( fileId: string ): Promise<{ fileRelativePath: string | undefined; fileUrl: string}> => {
@@ -90,11 +90,11 @@ const downloadAndSavePhoto = async ( fileId: string ): Promise<{ fileRelativePat
     const fileName = filetoGet.file_path?.replace("photos/", "").trim();
 
     fileUrl = `https://api.telegram.org/file/bot${token}/${filetoGet.file_path}`;
-    const downloadPath = join(__dirname, "../media/imgs");
+    const downloadPath = join(__dirname, "./media/imgs");
 
     fileRelativePath =
       fileName !== undefined
-        ? join(__dirname, "../media/imgs/", fileName)
+        ? join(__dirname, "./media/imgs/", fileName)
         : undefined;
 
     try {
@@ -138,7 +138,14 @@ class ClimaxSignal {
       lastStep: "pairs_0"
     };
 
-    this.History = [];
+    this.History = [
+      {
+        dateStamp: "" as ISO8601Date,
+        pair: "🇺🇸 USD / BRL 🇧🇷 (OTC)",
+        direction: "🟩 HIGHER",
+        result: ""
+      }
+    ];
 
     this.CurrencyPairs = {
       text: "Choose a currency pair\n\nIf it's not here (almost impossible ;)...), choose a closely similar one and edit the post after i send it to the channel.\n\n",
@@ -675,7 +682,7 @@ class ClimaxManager {
 
   sendSessionEndMessage = (signalHistory: SignalHistory, sessionName: string) => {
 
-    const sessionEndPhotoPath = join(__dirname, "../media/imgs/brand/session_end.jpg");
+    const sessionEndPhotoPath = join(__dirname, "./media/imgs/brand/session_end.jpg");
     const sessionEndPhotoStream = createReadStream(sessionEndPhotoPath);
 
     const countWinsAndLosses = (history: History[]): { wins: number; losses: number } => {
@@ -843,7 +850,7 @@ class ClimaxManager {
     
       if ("video" in MBMO && MBMO.video !== undefined) {
     
-        const videoFilePath = join(__dirname, "../media/videos", MBMO.video.path);
+        const videoFilePath = join(__dirname, "./media/videos", MBMO.video.path);
         const videoStream = createReadStream(videoFilePath);
     
         if ("text" in MBMO) {
@@ -882,7 +889,7 @@ class ClimaxManager {
     
       if ("image" in MBMO && MBMO.image !== undefined) {
         // send photo message
-        const imageFilePath = join(__dirname, "../media/imgs", MBMO.image);
+        const imageFilePath = join(__dirname, "./media/imgs", MBMO.image);
         const imageStream = createReadStream(imageFilePath);
     
         if ("text" in MBMO) {
@@ -1493,7 +1500,7 @@ bot.on("photo", async (message: TelegramBot.Message) => {
 bot.onText(/\/endsession/, (msg: TelegramBot.Message) =>{
   const presentSession = botManager.getPresentSession();
   const chatId = msg.from?.id;
-  handleSessionEnd("MORNING", chatId as ChatId, true);
+  handleSessionEnd(presentSession, chatId as ChatId, true);
 })
 
 
