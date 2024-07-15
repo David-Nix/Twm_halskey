@@ -20,7 +20,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const app = express();
 const port = Number(process.env.PORT) || 3000;
-// app.use("/media/imgs", express.static(join(__dirname, "../media/imgs")));
+// app.use("/media/imgs", express.static(join(__dirname, "./media/imgs")));
 const token = process.env.BOT_TOKEN;
 if (!token) {
     throw new Error("BOT_TOKEN is not defined");
@@ -42,9 +42,9 @@ const authorize = (chatId) => {
     }
 };
 const DATABASE = {
-    POSTS: join(__dirname, "../database/posts.json"),
-    HISTORY: join(__dirname, "../database/history.json"),
-    CRONS: join(__dirname, "../database/crons.json"),
+    POSTS: join(__dirname, "./database/posts.json"),
+    HISTORY: join(__dirname, "./database/history.json"),
+    CRONS: join(__dirname, "./database/crons.json"),
 };
 const downloadAndSavePhoto = (fileId) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
@@ -54,10 +54,10 @@ const downloadAndSavePhoto = (fileId) => __awaiter(void 0, void 0, void 0, funct
         const filetoGet = yield bot.getFile(fileId);
         const fileName = (_a = filetoGet.file_path) === null || _a === void 0 ? void 0 : _a.replace("photos/", "").trim();
         fileUrl = `https://api.telegram.org/file/bot${token}/${filetoGet.file_path}`;
-        const downloadPath = join(__dirname, "../media/imgs");
+        const downloadPath = join(__dirname, "./media/imgs");
         fileRelativePath =
             fileName !== undefined
-                ? join(__dirname, "../media/imgs/", fileName)
+                ? join(__dirname, "./media/imgs/", fileName)
                 : undefined;
         try {
             yield bot.downloadFile(fileId, downloadPath);
@@ -510,7 +510,7 @@ class ClimaxManager {
             return messageObject;
         };
         this.sendSessionEndMessage = (signalHistory, sessionName) => {
-            const sessionEndPhotoPath = join(__dirname, "../media/imgs/brand/session_end.jpg");
+            const sessionEndPhotoPath = join(__dirname, "./media/imgs/brand/session_end.jpg");
             const sessionEndPhotoStream = createReadStream(sessionEndPhotoPath);
             const countWinsAndLosses = (history) => {
                 return history.reduce((acc, entry) => ({
@@ -652,7 +652,7 @@ class ClimaxManager {
                     messageOptions = Object.assign(Object.assign({}, messageOptions), { reply_markup: MBMO.replyMarkup });
                 }
                 if ("video" in MBMO && MBMO.video !== undefined) {
-                    const videoFilePath = join(__dirname, "../media/videos", MBMO.video.path);
+                    const videoFilePath = join(__dirname, "./media/videos", MBMO.video.path);
                     const videoStream = createReadStream(videoFilePath);
                     if ("text" in MBMO) {
                         messageOptions = Object.assign(Object.assign({}, messageOptions), { caption: MBMO.text });
@@ -675,7 +675,7 @@ class ClimaxManager {
                 }
                 if ("image" in MBMO && MBMO.image !== undefined) {
                     // send photo message
-                    const imageFilePath = join(__dirname, "../media/imgs", MBMO.image);
+                    const imageFilePath = join(__dirname, "./media/imgs", MBMO.image);
                     const imageStream = createReadStream(imageFilePath);
                     if ("text" in MBMO) {
                         messageOptions = Object.assign(Object.assign({}, messageOptions), { caption: MBMO.text });
