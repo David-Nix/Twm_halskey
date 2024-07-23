@@ -40,5 +40,23 @@
     "id": "afternoon_get_ready",
     "schedule": ["10 17 * * 1-6"],
     "timezone": "Europe/London"
+  },
+  {
+    "name": "OVERNIGHT",
+    "id": "session_end",
+    "schedule": ["30 10 * * 1-6"],
+    "timezone": "Europe/London"
+  },
+  {
+    "name": "MORNING",
+    "id": "session_end",
+    "schedule": ["30 16 * * 1-6"],
+    "timezone": "Europe/London"
+  },
+  {
+    "name": "AFTERNOON",
+    "id": "session_end",
+    "schedule": ["30 22 * * 1-6"],
+    "timezone": "Europe/London"
   }
 ]

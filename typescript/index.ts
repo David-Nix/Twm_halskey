@@ -374,6 +374,16 @@ class ClimaxSignal {
     }
   }
 
+  checkSessionValidity = (): boolean | null => {
+    if (this.History[this.History.length - 1].result === null) {
+      return false;
+    } else if (this.History.length === 0) {
+      return null;
+    } else {
+      return true;
+    }
+  }
+
   lastStep = () => this.Signal.lastStep;
   step0 = () => this.CurrencyPairs.step0;
   step1 = () => this.CurrencyPairs.step1;
@@ -998,24 +1008,37 @@ const handleSessionEnd = (sessionName: string, chatId: ChatId, called: boolean =
       bot.sendMessage(chatId, `Do you want to post the session end message for ${sessionName} session?`, options)
       .then(sentMessage => {
         const messageId = sentMessage.message_id;
+
+        const sessionCanEnd = signalManager.checkSessionValidity();
   
         const timeoutId = setTimeout(() => {
-          botManager.sendSessionEndMessage(signalHistory, sessionName);
-          signalManager.clearHistory();
-          botManager.setLastBotMessageId(chatId as ChatId, 0);
-          bot.editMessageText("Session end message successfully posted...automatically", {
-            chat_id: chatId,
-            message_id: messageId
-          })
-          console.log("---------------------------------");
-          console.log("------- SESSION ENDED -----------");
+          if (sessionCanEnd) {
+            botManager.sendSessionEndMessage(signalHistory, sessionName);
+            signalManager.clearHistory();
+            botManager.setLastBotMessageId(chatId as ChatId, 0);
+            bot.editMessageText("Session end message successfully posted...automatically", {
+              chat_id: chatId,
+              message_id: messageId
+            })
+            console.log("---------------------------------");
+            console.log("------- SESSION ENDED -----------");
+          }
+          
+          if (!sessionCanEnd) {
+            bot.sendMessage(chatId as ChatId, "Session has a signal without a result, can't end session yet...")
+          }
         }, 5 * 60 * 1000);
   
         bot.on('callback_query', callbackQuery => {
           if (callbackQuery.message?.message_id === messageId) {
             clearTimeout(timeoutId);
             const response = callbackQuery.data;
-            if (response === 'yes') {
+            if (response === 'yes' && sessionCanEnd) {
+              if (!sessionCanEnd) {
+                bot.sendMessage(chatId as ChatId, "Session has a signal without a result, can't end session yet...");
+                return;
+              }
+
               botManager.sendSessionEndMessage(signalHistory, sessionName);
               signalManager.clearHistory();
               botManager.setLastBotMessageId(chatId as ChatId, 0);
@@ -1027,7 +1050,7 @@ const handleSessionEnd = (sessionName: string, chatId: ChatId, called: boolean =
               console.log("------- SESSION ENDED -----------");
             }
 
-            if (response === 'no') {
+            if (response === 'no' && sessionCanEnd) {
               bot.editMessageText("Okay, but you will need to end the session manually...YOURSELF", {
                 chat_id: chatId,
                 message_id: messageId
@@ -1054,7 +1077,7 @@ const scheduleClimaxCrons = () => {
     // console.log(`Running ${cronJob.name} job at..`);
 
     cronJob.schedule.forEach((cronExpression) => {
-      if (cronJob.id === "end") {
+      if (cronJob.id === "session_end") {
 
         cron.schedule(cronExpression, () => {
           const lastController = botManager.getLastAdmin();
@@ -1507,9 +1530,9 @@ bot.onText(/\/endsession/, (msg: TelegramBot.Message) =>{
 
 
 app.get("/", (req, res) => {
-    res.send("Halskey_TWM v1.0.0 is running...");
+    res.send("Halskey_TWM v1.1.0 is running...");
 });
 
 app.listen(port, () => {
-    console.log("Halskey_TWM v1.0.0 is running...");
+    console.log("Halskey_TWM v1.1.0 is running...");
 });
