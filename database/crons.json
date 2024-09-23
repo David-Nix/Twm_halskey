@@ -58,5 +58,11 @@
     "id": "session_end",
     "schedule": ["30 22 * * 1-6"],
     "timezone": "Europe/London"
+  },
+  {
+    "name": "DAY",
+    "id": "day_end",
+    "schedule": ["40 22 * * 1-6"],
+    "timezone": "Europe/London"
   }
 ]

@@ -34,9 +34,14 @@ export interface History {
   pair: string;
   direction: string;
   result: string | null;
+  initialTime: string;
 }
 
 export type SignalHistory = History[]
+
+export interface dayHistory {
+  [key: string]: SignalHistory
+}
 
 export interface CurrencyPairs {
   text: string;

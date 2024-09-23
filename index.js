@@ -119,7 +119,8 @@ class ClimaxSignal {
                 dateStamp: timeAndDateSTamp,
                 pair: this.Signal.pair,
                 direction: this.Signal.direction,
-                result: null
+                result: null,
+                initialTime: entryTime
             });
             return SIGNAL_MSG;
         };
@@ -170,6 +171,14 @@ class ClimaxSignal {
                 return true;
             }
         };
+        this.saveHistoryForDay = (sessionName, sessionHistory) => {
+            this.dayHistory[sessionName] = sessionHistory;
+            console.log("------ SESSION HISTORY SAVED FOR DAY ------");
+        };
+        this.getDayHistory = () => this.dayHistory;
+        this.clearDayHistory = () => {
+            this.dayHistory = {};
+        };
         this.lastStep = () => this.Signal.lastStep;
         this.step0 = () => this.CurrencyPairs.step0;
         this.step1 = () => this.CurrencyPairs.step1;
@@ -183,14 +192,7 @@ class ClimaxSignal {
             direction: "",
             lastStep: "pairs_0"
         };
-        this.History = [
-            {
-                dateStamp: "",
-                pair: "🇺🇸 USD / BRL 🇧🇷 (OTC)",
-                direction: "🟩 HIGHER",
-                result: ""
-            }
-        ];
+        this.History = [];
         this.CurrencyPairs = {
             text: "Choose a currency pair\n\nIf it's not here (almost impossible ;)...), choose a closely similar one and edit the post after i send it to the channel.\n\n",
             step0: [
@@ -323,6 +325,7 @@ class ClimaxSignal {
                 [{ text: "Cancel Operation", callback_data: "cancel_op" }],
             ],
         };
+        this.dayHistory = {};
     }
 }
 const signalManager = new ClimaxSignal();
@@ -345,7 +348,7 @@ class ResultManager {
                 console.error("Error adding watermark:", error);
             }
         });
-        this.directWin = "WIN⁰ ✅ - Direct WIN 🏆👏";
+        this.directWin = "✅ WIN⁰ ✅ - Direct WIN 🏆👏";
         this.martingale1 = "✅ WIN¹ ✅ - Victory in Martingale 1 🫵";
         this.martingale2 = "✅ WIN² ✅ - Victory in Martingale 2 🫵";
         this.martingale3 = "✅ WIN³ ✅ - Victory in Martingale 3 🫵";
@@ -551,14 +554,20 @@ class ClimaxManager {
                 default:
                     break;
             }
+            const accuracyPercentage = (wins, losses) => {
+                const totalSignals = wins + losses;
+                const per = wins / totalSignals;
+                return `${(per * 100).toFixed(2)}%`;
+            };
             let SESSION_END_MSG = `<strong>📝 REPORT</strong>\n`;
             SESSION_END_MSG += `<strong>${sessionIcon} ${sessionName} SESSION</strong>\n\n`;
-            SESSION_END_MSG += `<blockquote>\n\n`;
+            SESSION_END_MSG += `<blockquote>`;
             signalHistory.map((history) => {
-                SESSION_END_MSG += `<strong>${history.pair} - ${history.result}</strong>\n`;
+                SESSION_END_MSG += `<code><strong>${history.initialTime} • ${history.pair} • ${(history.result !== null) ? history.result.split("-")[0] : history.direction}</strong></code>\n`;
             });
             SESSION_END_MSG += `\n</blockquote>\n`;
             SESSION_END_MSG += `<strong>${(numberToEmoji[sessionResult.wins])} ${(sessionResult.wins > 1) ? "WINS" : "WIN"} - ${(numberToEmoji[sessionResult.losses])} ${(sessionResult.losses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
+            SESSION_END_MSG += `<strong>❇️ Accuracy: ${accuracyPercentage(sessionResult.wins, sessionResult.losses)}%</strong>\n\n`;
             SESSION_END_MSG += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
             bot.sendPhoto(T_W_M, sessionEndPhotoStream, {
                 parse_mode: "HTML",
@@ -734,6 +743,92 @@ class ClimaxManager {
             }
             return true;
         };
+        this.seshNameByTime = () => {
+            const now = new Date();
+            const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const londonOffset = 1;
+            const londonTime = new Date(utcTime + (londonOffset * 3600000));
+            const hours = londonTime.getHours();
+            const minutes = londonTime.getMinutes();
+            const timeInMinutes = hours * 60 + minutes;
+            const overnightStart = 6 * 60 + 30;
+            const overnightEnd = 10 * 60 + 30;
+            const morningStart = 11 * 60 + 30;
+            const morningEnd = 16 * 60 + 30;
+            const afternoonStart = 17 * 60 + 30;
+            const afternoonEnd = 22 * 60 + 30;
+            if (timeInMinutes >= overnightStart && timeInMinutes <= overnightEnd) {
+                return "OVERNIGHT";
+            }
+            else if (timeInMinutes >= morningStart && timeInMinutes <= morningEnd) {
+                return "MORNING";
+            }
+            else if (timeInMinutes >= afternoonStart && timeInMinutes <= afternoonEnd) {
+                return "AFTERNOON";
+            }
+            else {
+                return "OUTSIDE SESSION";
+            }
+        };
+        this.sendDayEndMessage = (dayHistory, chatId) => {
+            const sessionOfDay = Object.keys(dayHistory);
+            const getDayFormatted = () => {
+                const today = new Date();
+                const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                const dayOfMonth = today.getDate();
+                const ordinalSuffix = (n) => ['th', 'st', 'nd', 'rd'][((n % 100) - 20) % 10] || 'th';
+                return `${daysOfWeek[today.getDay()]}, ${months[today.getMonth()]} ${dayOfMonth}${ordinalSuffix(dayOfMonth)}, ${today.getFullYear()}`;
+            };
+            let tWins = 0;
+            let tLosses = 0;
+            const countWinsAndLosses = (history) => {
+                const { wins, losses } = history.reduce((acc, signal) => {
+                    if (signal.result && signal.result.includes("WIN")) {
+                        acc.wins += 1;
+                    }
+                    else {
+                        acc.losses += 1;
+                    }
+                    return acc;
+                }, { wins: 0, losses: 0 });
+                tWins += wins;
+                tLosses += losses;
+            };
+            const accuracyPercentage = (wins, losses) => {
+                const totalSignals = wins + losses;
+                const per = wins / totalSignals;
+                return `${(per * 100).toFixed(2)}%`;
+            };
+            let mts = `<strong>🧾 DIALY REPORT</strong>\n`;
+            mts += `<strong>🗓 ${getDayFormatted()}</strong>\n\n`;
+            mts += `<pre>\n`;
+            for (const sessionName of sessionOfDay) {
+                const sessionHistory = dayHistory[sessionName];
+                countWinsAndLosses(sessionHistory);
+                mts += `\n<code>${sessionName.toLocaleUpperCase()} SESSION</code>\n`;
+                mts += `<code>➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖</code>\n`;
+                sessionHistory.map((history) => {
+                    mts += `<code><strong>${history.initialTime} • ${history.pair} • ${(history.result !== null) ? history.result.split("-")[0] : history.direction}</strong></code>\n`;
+                });
+            }
+            mts += `\n</pre>\n\n`;
+            mts += `<strong>${numberToEmoji[tWins]} ${(tWins > 1) ? "WINS" : "WIN"} - ${numberToEmoji[tLosses]} ${(tLosses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
+            mts += `<strong>❇️ Accuracy: ${accuracyPercentage(tWins, tLosses)}</strong>\n\n`;
+            mts += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
+            bot.sendMessage(T_W_M, mts, {
+                parse_mode: "HTML",
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: "SHARE TESTIMONY", url: "https://t.me/goodclimaxtrades_support" }],
+                        [{ text: "LEARN HOW TO TRADE", url: "https://telegra.ph/ESSENTIAL-GUIDE-TO-TRADING-SUCCESSFULLY-06-25" }],
+                    ]
+                }
+            }).then(() => {
+                bot.sendMessage(chatId, "Day End Message Sent Successsfully!");
+            });
+            console.log('----- DAILY REPORT SENT SUCCESSFULLY -----');
+        };
         // this.lastAdmin = 0;
         this.lastAdmin = INCENIX;
         this.presentSession = "";
@@ -775,8 +870,10 @@ const handleSessionEnd = (sessionName, chatId, called = false) => {
                 const timeoutId = setTimeout(() => {
                     if (sessionCanEnd) {
                         botManager.sendSessionEndMessage(signalHistory, sessionName);
-                        signalManager.clearHistory();
+                        const prSh = botManager.seshNameByTime();
+                        signalManager.saveHistoryForDay(prSh, signalHistory);
                         botManager.setLastBotMessageId(chatId, 0);
+                        signalManager.clearHistory();
                         bot.editMessageText("Session end message successfully posted...automatically", {
                             chat_id: chatId,
                             message_id: messageId
@@ -799,6 +896,8 @@ const handleSessionEnd = (sessionName, chatId, called = false) => {
                                 return;
                             }
                             botManager.sendSessionEndMessage(signalHistory, sessionName);
+                            const prSh = botManager.seshNameByTime();
+                            signalManager.saveHistoryForDay(prSh, signalHistory);
                             signalManager.clearHistory();
                             botManager.setLastBotMessageId(chatId, 0);
                             bot.editMessageText("Session end message successfully posted...", {
@@ -823,6 +922,17 @@ const handleSessionEnd = (sessionName, chatId, called = false) => {
         }
     }
 };
+const handleDayEnd = () => {
+    const historyOfDay = signalManager.getDayHistory();
+    const lastAdmin = botManager.getLastAdmin();
+    if (lastAdmin !== null) {
+        botManager.sendDayEndMessage(historyOfDay, lastAdmin);
+        signalManager.clearDayHistory();
+    }
+    else {
+        console.log("No admin found to send day end message");
+    }
+};
 const scheduleClimaxCrons = () => {
     console.log("Will schedule all T_W_M crons...");
     const rawCronFileData = readFileSync(DATABASE.CRONS, 'utf-8');
@@ -836,12 +946,21 @@ const scheduleClimaxCrons = () => {
                     handleSessionEnd(cronJob.name, lastController);
                 }, { timezone: cronJob.timezone });
             }
+            else if (cronJob.id === "day_end") {
+                cron.schedule(cronExpression, () => {
+                    handleDayEnd();
+                }, { timezone: cronJob.timezone });
+            }
             else {
                 const MBMO = botManager.getMessageFromBank({ id: cronJob.id });
                 if (MBMO !== undefined) {
                     cron.schedule(cronExpression, () => {
+                        if (cronJob.id === "overnight_start" || cronJob.id === "morning_start" || cronJob.id === "afternoon_start") {
+                            const prSesh = botManager.seshNameByTime();
+                            botManager.setPresentSession(prSesh || cronJob.id.split("_")[0].toLocaleUpperCase());
+                            console.log(`......New session commences: ${prSesh || cronJob.id.split("_")[0].toLocaleUpperCase()} SESSION`);
+                        }
                         // TODO: Implement job logic
-                        console.log(`Posting message with id: ${cronJob.id}`);
                         botManager.sendMessageOnMBMOType(MBMO, T_W_M);
                     }, { timezone: cronJob.timezone });
                 }
@@ -904,7 +1023,7 @@ bot.onText(/\/result/, (msg) => {
     const authorized = authorize(chatId);
     if (authorized) {
         const RESULT = {
-            martingale0: "WIN⁰ ✅ - Direct WIN 🏆👏",
+            martingale0: "✅ WIN⁰ ✅ - Direct WIN 🏆👏",
             martingale1: "✅ WIN¹ ✅ - Victory in Martingale 1 ☝",
             martingale2: "✅ WIN² ✅ - Victory in Martingale 2 ☝",
             martingale3: "✅ WIN³ ✅ - Victory in Martingale 3 ☝",
@@ -1015,15 +1134,15 @@ bot.on("callback_query", (callbackQuery) => __awaiter(void 0, void 0, void 0, fu
             let text = "↕ What direction would you like to go?\nChoose an option below:";
             const keyboard = [
                 [
-                    { text: "🟩 HIGHER", callback_data: "direction_up" },
-                    { text: "🟥 LOWER ", callback_data: "direction_down" }
+                    { text: "🟩 BUY", callback_data: "direction_up" },
+                    { text: "🟥 SELL ", callback_data: "direction_down" }
                 ],
                 [{ text: "◀ Back", callback_data: "hour_0" }],
             ];
             botManager.deleteAndSendNewMessage(text, messageId, chatId, keyboard);
         }
         if (action === "direction_up" || action === "direction_down") {
-            signalManager.setDirection((action === "direction_up") ? "🟩 HIGHER" : "🟥 LOWER");
+            signalManager.setDirection((action === "direction_up") ? "🟩 BUY" : "🟥 SELL");
             signalManager.setLastStep(action);
             const SIGNAL = signalManager.presentSignal();
             let text = "Okay let's review what you've chosen:\n\n";
@@ -1153,11 +1272,18 @@ bot.onText(/\/endsession/, (msg) => {
     var _a;
     const presentSession = botManager.getPresentSession();
     const chatId = (_a = msg.from) === null || _a === void 0 ? void 0 : _a.id;
-    handleSessionEnd(presentSession, chatId, true);
+    const prSesh = botManager.seshNameByTime();
+    handleSessionEnd(prSesh || presentSession, chatId, true);
+});
+bot.onText(/\/endday/, (msg) => {
+    var _a;
+    const presentSession = botManager.getPresentSession();
+    const chatId = (_a = msg.from) === null || _a === void 0 ? void 0 : _a.id;
+    handleDayEnd();
 });
 app.get("/", (req, res) => {
-    res.send("Halskey_TWM v1.1.0 is running...");
+    res.send("Halskey_TWM v2.0.0 is running...");
 });
 app.listen(port, () => {
-    console.log("Halskey_TWM v1.1.0 is running...");
+    console.log("Halskey_TWM v2.0.0 is running...");
 });
