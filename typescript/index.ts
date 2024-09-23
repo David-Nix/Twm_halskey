@@ -1103,10 +1103,14 @@ const handleSessionEnd = (sessionName: string, chatId: ChatId, called: boolean =
       bot.sendMessage(chatId, `Do you want to post the session end message for ${sessionName} session?`, options)
       .then(sentMessage => {
         const messageId = sentMessage.message_id;
-
         const sessionCanEnd = signalManager.checkSessionValidity();
   
         const timeoutId = setTimeout(() => {
+          if (!sessionCanEnd) {
+            bot.sendMessage(chatId as ChatId, "Session has a signal without a result, can't end session yet...")
+            return;
+          }
+
           if (sessionCanEnd) {
             botManager.sendSessionEndMessage(signalHistory, sessionName);
             const prSh = botManager.seshNameByTime();
@@ -1121,9 +1125,6 @@ const handleSessionEnd = (sessionName: string, chatId: ChatId, called: boolean =
             console.log("------- SESSION ENDED -----------");
           }
           
-          if (!sessionCanEnd) {
-            bot.sendMessage(chatId as ChatId, "Session has a signal without a result, can't end session yet...")
-          }
         }, 5 * 60 * 1000);
   
         bot.on('callback_query', callbackQuery => {
