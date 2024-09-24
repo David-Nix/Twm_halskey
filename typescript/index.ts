@@ -112,18 +112,26 @@ const downloadAndSavePhoto = async ( fileId: string ): Promise<{ fileRelativePat
   return { fileRelativePath, fileUrl }
 };
 
-const numberToEmoji: { [key: number]: string } = {
-  0: '0⃣',
-  1: '1⃣',
-  2: '2⃣',
-  3: '3⃣',
-  4: '4⃣',
-  5: '5⃣',
-  6: '6⃣',
-  7: '7⃣',
-  8: '8⃣',
-  9: '9⃣'
-};
+const returnEmoji = (inp: string): string => {
+  const numberToEmoji: { [key: number]: string } = {
+    0: '0⃣',
+    1: '1⃣',
+    2: '2⃣',
+    3: '3⃣',
+    4: '4⃣',
+    5: '5⃣',
+    6: '6⃣',
+    7: '7⃣',
+    8: '8⃣',
+    9: '9⃣'
+  };
+
+  const ogNumberString = inp.split('');
+  const modNumberString = ogNumberString.map((num: string) => numberToEmoji[Number(num)]);
+  const modString = modNumberString.join('');
+  
+  return modString;
+}
 
 class ClimaxSignal {
   CurrencyPairs: CurrencyPairs;
@@ -746,7 +754,7 @@ class ClimaxManager {
           SESSION_END_MSG += `<code><strong>${history.initialTime} • ${history.pair} • ${(history.result !== null) ? history.result.split("-")[0] : history.direction}</strong></code>\n`
         })
         SESSION_END_MSG += `\n</blockquote>\n`;
-        SESSION_END_MSG += `<strong>${(numberToEmoji[sessionResult.wins])} ${(sessionResult.wins > 1) ? "WINS" : "WIN"} - ${(numberToEmoji[sessionResult.losses])} ${(sessionResult.losses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
+        SESSION_END_MSG += `<strong>${(returnEmoji(sessionResult.wins.toString()))} ${(sessionResult.wins > 1) ? "WINS" : "WIN"} - ${(returnEmoji(sessionResult.losses.toString()))} ${(sessionResult.losses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
         SESSION_END_MSG += `<strong>❇️ Accuracy: ${accuracyPercentage(sessionResult.wins, sessionResult.losses)}%</strong>\n\n`;
         SESSION_END_MSG += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
     
@@ -1056,7 +1064,7 @@ class ClimaxManager {
       })
     }
     mts += `\n</pre>\n\n`;
-    mts += `<strong>${numberToEmoji[tWins]} ${(tWins > 1) ? "WINS" : "WIN"} - ${numberToEmoji[tLosses]} ${(tLosses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
+    mts += `<strong>${returnEmoji(tWins.toString())} ${(tWins > 1) ? "WINS" : "WIN"} - ${returnEmoji(tLosses.toString())} ${(tLosses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
     mts += `<strong>❇️ Accuracy: ${accuracyPercentage(tWins, tLosses)}</strong>\n\n`;
     mts += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
 
@@ -1661,9 +1669,9 @@ bot.onText(/\/endday/, (msg: TelegramBot.Message) =>{
 
 
 app.get("/", (req, res) => {
-    res.send("Halskey_TWM v2.0.0 is running...");
+    res.send("Halskey_TWM v2.0.1 is running...");
 });
 
 app.listen(port, () => {
-    console.log("Halskey_TWM v2.0.0 is running...");
+    console.log("Halskey_TWM v2.0.1 is running...");
 });
