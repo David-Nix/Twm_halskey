@@ -1072,8 +1072,8 @@ class ClimaxManager {
       parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: [
-          [{ text: "SHARE TESTIMONY", url: "https://t.me/goodclimaxtrades_support" }],
-          [{ text: "LEARN HOW TO TRADE", url: "https://telegra.ph/ESSENTIAL-GUIDE-TO-TRADING-SUCCESSFULLY-06-25" }],
+          [{ text: "SHARE TESTIMONY", url: "https://t.me/twmsupports" }],
+          [{ text: "LEARN HOW TO TRADE", url: "https://telegra.ph/STRICT-INSTRUCTIONS-ON-HOW-TO-TRADE-SUCCESSFULLY-02-09" }],
         ]
       }
     }).then(() => {
