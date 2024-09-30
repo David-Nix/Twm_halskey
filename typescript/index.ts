@@ -612,10 +612,23 @@ class ResultManager {
   callLossType2Image = async (fileId: string) => {
     try {
       const watermarkPath = `https://lh3.googleusercontent.com/pw/AP1GczPt3db3v4XAjMGyZIo94YUcG0Oqa4Shvq8SmBpheJ3Qz3Tk9BzQAhm-HC6kwQWQhy85PW9kPPGGkJAaYB7hn1kKP0SQ_sStZCNokOrMspgBWZetkBuwkNAFKHhMZD_GW43Edc771MVyDOYfAP9Com83QJFx6-xVRiHcNg-cQ7EkRXAZ2cKPaJzdeytdYB0GQO3UfHkEjbnK_CMOm_Cef0oqadY_8wgJYBKO5Ia_WCqcfT5oM2GlTrVyhx2ed6_FrBwi_BY9tihd8su0FnE7gNE6ceUr3vYd9w1jeZziPmHkPfa_xPbwr_WzqJmwNJDljyDRaBPlZYDiaUxuW0_KP5dETGtR_6LlqFF-3LB-axuq4GpbJaaUgDEn9MVaX207va7hN0xqHlBa7TYIaGEc0fANi38BR3DKdqLqFdWqPpUe6foiLNp8ON5Ib1yegjtfGW9s_-2kr_VtvPCLNHIMb_CHuHgfeOT8iBckYr_Hkg6aLu8R11eBgIyznxVLxidOR_ffs4bVB2u0XwOucs4eoFWIVvVcbkBQs-mE2RIggXyg8OBLFoNS-rGR3E8l8U5vLR3nlxrAU-ziH7GWO_wyWNB99UhoT7pfzxcpvfvyuCMrHrqnJ_mGsCaGFYxguUIDoTMyRWNQNPVXIi1Vg2HiP30ikiVWOLTiYxuJs3DRVGbxCJw87CwsDd685hTNAgdkSl3WrxM2me_NDW3Fke_aSZJNlRLCC728aljTp-iKSz_JuuP3-gKnzqluNVPLt7fmKhZXGC6ul7TiroUYLAuMr898F6kyz53BYlVp4va0WljphF7QNE_BSUJk8JyGMAfQnKNb3wlMiOm17lUYEh_V0-xe8xko5Y8ov3ozarTVgT4V5-BrDPQD1GxLwnvisc9LxnGAP5id5utAzsq9K3I3lv-yx8S6XXM1XQD-897VKwUPhVKJogmlIUmJwphN9oocdxAET8WWmUDitwtJoA=w691-h590-no?authuser=0`;
-      const mainPhotoPath = await sessionManager.downloadAndSavePhoto(fileId);
+      const mainPhotoPath = await sessionManager.downloadAndSavePhoto(fileId).catch((err) => {
+        console.error(err);
+        return null;
+      });
 
-      const quickChartLink = `https://quickchart.io/watermark?mainImageUrl=${mainPhotoPath.fileUrl}&markImageUrl=${watermarkPath}&markRatio=0.7&position=center&opacity=1`
-      return quickChartLink;
+      if (mainPhotoPath !== null) {
+        const quickChartLink = `https://quickchart.io/watermark?mainImageUrl=${mainPhotoPath.fileUrl}&markImageUrl=${watermarkPath}&markRatio=0.6&position=center&opacity=0.65`;
+      
+        const watermarkImage = await sessionManager.downloadMarkedPhoto(quickChartLink).then(result => {
+          console.log('Download Status:', result.status);
+          console.log('Saved as:', result.filename);
+          return result.filename;
+        });
+      
+        const filePath = join(__dirname, '../media/imgs', watermarkImage);
+        return filePath;
+      }
 
     } catch (error) {
       console.error("Error adding watermark:", error);
