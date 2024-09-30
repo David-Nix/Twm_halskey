@@ -27,7 +27,7 @@ export interface Signal {
 }
 
 
-export type ISO8601Date = string & { __isISO8601Date: true };
+export type ISO8601Date = string;
 
 export interface History {
   dateStamp: ISO8601Date;
@@ -102,7 +102,7 @@ export interface Result {
     image: string | null;
 }
 
-export interface Session {
+export interface SessionDetails {
   startHour: number;
   startMinute: number;
   blub: string;

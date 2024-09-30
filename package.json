@@ -1,6 +1,6 @@
 {
   "name": "twm-bot",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "main": "index.js",
   "description": "Halskey_TWM is a Telegram bot designed to simplify signal sending, manage signal sessions, create posts with buttons, and schedule posts for channels.",
   "type": "module",

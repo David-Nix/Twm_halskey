@@ -8,11 +8,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import TelegramBot from "node-telegram-bot-api";
+import { v4 as uuidv4, } from "uuid";
 import express from "express";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import cron from "node-cron";
-import { readFileSync, createReadStream } from "fs";
+import axios from "axios";
+import { readFileSync, writeFileSync, createReadStream } from "fs";
 import dotenv from "dotenv";
 dotenv.config();
 process.env["NTBA_FIX_350"] = "1";
@@ -20,7 +22,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const app = express();
 const port = Number(process.env.PORT) || 3000;
-// app.use("/media/imgs", express.static(join(__dirname, "./media/imgs")));
 const token = process.env.BOT_TOKEN;
 if (!token) {
     throw new Error("BOT_TOKEN is not defined");
@@ -31,7 +32,7 @@ const bot = new TelegramBot(token, {
 });
 const TWM_ADMIN = Number(process.env.OWNER);
 const INCENIX = Number(process.env.INCENIX);
-const T_W_M = Number(process.env.CHANNEL);
+const T_W_M = Number(process.env.ATOMIX);
 const atomix = Number(process.env.ATOMIX);
 const authorize = (chatId) => {
     if (chatId === INCENIX || chatId === TWM_ADMIN) {
@@ -46,52 +47,232 @@ const DATABASE = {
     HISTORY: join(__dirname, "./database/history.json"),
     CRONS: join(__dirname, "./database/crons.json"),
 };
-const downloadAndSavePhoto = (fileId) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
-    let fileRelativePath = undefined;
-    let fileUrl = "";
-    if (fileId !== undefined) {
-        const filetoGet = yield bot.getFile(fileId);
-        const fileName = (_a = filetoGet.file_path) === null || _a === void 0 ? void 0 : _a.replace("photos/", "").trim();
-        fileUrl = `https://api.telegram.org/file/bot${token}/${filetoGet.file_path}`;
-        const downloadPath = join(__dirname, "./media/imgs");
-        fileRelativePath =
-            fileName !== undefined
-                ? join(__dirname, "./media/imgs/", fileName)
-                : undefined;
-        try {
-            yield bot.downloadFile(fileId, downloadPath);
-            console.log("Photo downloaded successfully...");
-        }
-        catch (err) {
-            console.log("Error downloading photo");
-            fileRelativePath = undefined;
-        }
+class Session {
+    constructor() {
+        this.getPostTime = () => {
+            const now = new Date();
+            const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const londonOffset = 1;
+            const londonTime = new Date(utcTime + (londonOffset * 3600000));
+            const hours = londonTime.getHours();
+            const minutes = londonTime.getMinutes();
+            const timeInMinutes = hours * 60 + minutes;
+            console.log(`Present time (Timezone: London): ${hours}:${minutes} ${(hours > 12) ? 'PM' : 'AM'}`);
+            const overnightStart = 6 * 60;
+            const overnightEnd = 11 * 60;
+            const morningStart = 11 * 60 + 1;
+            const morningEnd = 17 * 60;
+            const afternoonStart = 17 * 60 + 1;
+            const afternoonEnd = 23 * 60 + 59;
+            if (timeInMinutes >= overnightStart && timeInMinutes <= overnightEnd) {
+                return "OVERNIGHT";
+            }
+            else if (timeInMinutes >= morningStart && timeInMinutes <= morningEnd) {
+                return "MORNING";
+            }
+            else if (timeInMinutes >= afternoonStart && timeInMinutes <= afternoonEnd) {
+                return "AFTERNOON";
+            }
+            else {
+                return "OUTSIDE";
+            }
+        };
+        this.returnEmoji = (count) => {
+            const numberToEmoji = {
+                0: '0⃣',
+                1: '1⃣',
+                2: '2⃣',
+                3: '3⃣',
+                4: '4⃣',
+                5: '5⃣',
+                6: '6⃣',
+                7: '7⃣',
+                8: '8⃣',
+                9: '9⃣'
+            };
+            const ogNumberString = count.split('');
+            const modNumberString = ogNumberString.map((num) => numberToEmoji[Number(num)]);
+            const modString = modNumberString.join('');
+            return modString;
+        };
+        this.downloadAndSavePhoto = (fileId) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            let fileRelativePath = undefined;
+            let fileUrl = "";
+            if (fileId !== undefined) {
+                try {
+                    const filetoGet = yield bot.getFile(fileId);
+                    const fileName = (_a = filetoGet.file_path) === null || _a === void 0 ? void 0 : _a.replace("photos/", "").trim();
+                    fileUrl = `https://api.telegram.org/file/bot${token}/${filetoGet.file_path}`;
+                    const downloadPath = join(__dirname, "./media/imgs");
+                    fileRelativePath =
+                        fileName !== undefined
+                            ? join(__dirname, "./media/imgs/", fileName)
+                            : undefined;
+                    yield bot.downloadFile(fileId, downloadPath);
+                    console.log("Photo downloaded successfully...");
+                }
+                catch (err) {
+                    console.log("Error downloading photo");
+                    fileRelativePath = undefined;
+                }
+            }
+            else {
+                console.log("No photo found ...or photo has no file_id");
+            }
+            return { fileRelativePath, fileUrl };
+        });
+        this.downloadMarkedPhoto = (url) => __awaiter(this, void 0, void 0, function* () {
+            const filename = `${uuidv4()}.png`;
+            const filePath = join(__dirname, '../media/imgs', filename);
+            try {
+                const response = yield axios({
+                    url,
+                    method: 'GET',
+                    responseType: 'arraybuffer',
+                });
+                writeFileSync(filePath, response.data, 'binary');
+                console.log(`Image downloaded and saved as ${filename}`);
+                return { status: true, filename };
+            }
+            catch (error) {
+                console.error('Error downloading the image:', error);
+                return { status: false, filename };
+            }
+        });
+        this.saveSignal = (signalObject) => {
+            try {
+                const historyDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
+                const historyDB = JSON.parse(historyDBRaw);
+                const presentSession = this.getPostTime();
+                historyDB[presentSession].push(signalObject);
+                writeFileSync(DATABASE.HISTORY, JSON.stringify(historyDB), { encoding: 'utf8' });
+                return { status: true };
+            }
+            catch (err) {
+                console.error(err);
+                return { status: false };
+            }
+        };
+        this.saveResult = (result) => {
+            try {
+                const resultDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
+                const resultDB = JSON.parse(resultDBRaw);
+                const presentSession = this.getPostTime();
+                resultDB[presentSession].at(-1).result = result;
+                writeFileSync(DATABASE.HISTORY, JSON.stringify(resultDB), { encoding: 'utf8' });
+                return { status: true };
+            }
+            catch (err) {
+                console.error(err);
+                return { status: false };
+            }
+        };
+        this.getHistory = () => {
+            const presentSession = this.getPostTime();
+            const historyDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
+            const historyDB = JSON.parse(historyDBRaw);
+            return historyDB[presentSession];
+        };
+        this.getSessionAccuracy = (wins, losses) => {
+            const totalSignals = wins + losses;
+            const per = wins / totalSignals;
+            return {
+                status: true,
+                percentage: `${(per * 100).toFixed(2)}%`
+            };
+        };
+        this.checkSessionValidity = () => {
+            const presentSession = this.getPostTime();
+            const historyDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
+            const historyDB = JSON.parse(historyDBRaw);
+            if (historyDB[presentSession].at(-1).result === null) {
+                return false;
+            }
+            else if (historyDB[presentSession].length === 0) {
+                return null;
+            }
+            else {
+                return true;
+            }
+        };
+        this.sendSessionEndMessage = () => {
+            try {
+                const historyDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
+                const historyDB = JSON.parse(historyDBRaw);
+                const presentSession = this.getPostTime();
+                const sessionEndPhotoPath = join(__dirname, "./media/imgs/brand/session_end.jpg");
+                const sessionEndPhotoStream = createReadStream(sessionEndPhotoPath);
+                const countWinsAndLosses = (history) => {
+                    return history.reduce((acc, entry) => ({
+                        wins: acc.wins + (entry.result.includes("WIN") ? 1 : 0),
+                        losses: acc.losses + (!(entry.result.includes("WIN")) ? 1 : 0),
+                    }), { wins: 0, losses: 0 });
+                };
+                const sessionResult = countWinsAndLosses(historyDB[presentSession]);
+                let sessionIcon = "";
+                switch (presentSession) {
+                    case "OVERNIGHT":
+                        sessionIcon = "🌑";
+                        break;
+                    case "MORNING":
+                        sessionIcon = "🌙";
+                        break;
+                    case "AFTERNOON":
+                        sessionIcon = "☀";
+                        break;
+                    default:
+                        break;
+                }
+                const accuracyPercentage = (wins, losses) => {
+                    const totalSignals = wins + losses;
+                    const per = wins / totalSignals;
+                    return `${(per * 100).toFixed(2)}%`;
+                };
+                let SESSION_END_MSG = `<strong>📝 REPORT</strong>\n`;
+                SESSION_END_MSG += `<strong>${sessionIcon} ${presentSession} SESSION</strong>\n\n`;
+                SESSION_END_MSG += `<blockquote>`;
+                historyDB[presentSession].map((history) => {
+                    SESSION_END_MSG += `<code><strong>${history.initialTime} • ${history.pair} • ${(history.result !== null) ? history.result.split("-")[0] : history.direction}</strong></code>\n`;
+                });
+                SESSION_END_MSG += `\n</blockquote>\n`;
+                SESSION_END_MSG += `<strong>${(sessionManager.returnEmoji(sessionResult.wins.toString()))} ${(sessionResult.wins > 1) ? "WINS" : "WIN"} - ${(sessionManager.returnEmoji(sessionResult.losses.toString()))} ${(sessionResult.losses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
+                SESSION_END_MSG += `<strong>❇️ Accuracy: ${accuracyPercentage(sessionResult.wins, sessionResult.losses)}%</strong>\n\n`;
+                SESSION_END_MSG += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
+                bot.sendPhoto(T_W_M, sessionEndPhotoStream, {
+                    parse_mode: "HTML",
+                    caption: SESSION_END_MSG,
+                    reply_markup: {
+                        "inline_keyboard": [
+                            [{ "text": "CREATE AN ACCOUNT HERE", "url": "https://shorturl.at/cehnV" }],
+                            [{ "text": "OPEN BROKER HERE", "url": "https://shorturl.at/cehnV" }],
+                            [{ "text": "CONTACT SUPPORT HERE", "url": "https://t.me/twmsupports" }]
+                        ]
+                    }
+                }, {
+                    contentType: "application/octet-stream"
+                });
+            }
+            catch (error) {
+                console.error(error);
+            }
+        };
+        this.history = [];
+        this.dayHistory = {};
     }
-    else {
-        console.log("No photo found ...or photo has no file_id");
-    }
-    return { fileRelativePath, fileUrl };
+}
+const sessionManager = new Session();
+sessionManager.saveSignal({
+    dateStamp: "new Date()",
+    pair: "AUD / CAD",
+    direction: "HIGHER",
+    result: null,
+    initialTime: "13:34"
 });
-const returnEmoji = (inp) => {
-    const numberToEmoji = {
-        0: '0⃣',
-        1: '1⃣',
-        2: '2⃣',
-        3: '3⃣',
-        4: '4⃣',
-        5: '5⃣',
-        6: '6⃣',
-        7: '7⃣',
-        8: '8⃣',
-        9: '9⃣'
-    };
-    const ogNumberString = inp.split('');
-    const modNumberString = ogNumberString.map((num) => numberToEmoji[Number(num)]);
-    const modString = modNumberString.join('');
-    return modString;
-};
-class ClimaxSignal {
+setTimeout(() => {
+    sessionManager.saveResult("WIN");
+}, 2000);
+class SignalManager {
     constructor() {
         this.createNewSignal = () => {
             const padZero = (num) => num.toString().padStart(2, "0");
@@ -104,16 +285,16 @@ class ClimaxSignal {
                 h %= 24;
                 return `${padZero(h)}:${padZero(m)}`;
             };
-            const entryTime = `${padZero(this.Signal.hour)}:${padZero(this.Signal.minute)}`;
+            const entryTime = `${padZero(this.signal.hour)}:${padZero(this.signal.minute)}`;
             const martingaleLevels = [
-                getNextTime(this.Signal.hour, this.Signal.minute, 5),
-                getNextTime(this.Signal.hour, this.Signal.minute, 10),
-                getNextTime(this.Signal.hour, this.Signal.minute, 15),
+                getNextTime(this.signal.hour, this.signal.minute, 5),
+                getNextTime(this.signal.hour, this.signal.minute, 10),
+                getNextTime(this.signal.hour, this.signal.minute, 15),
             ];
-            let SIGNAL_MSG = `<strong>${this.Signal.pair}</strong>\n\n`;
+            let SIGNAL_MSG = `<strong>${this.signal.pair}</strong>\n\n`;
             SIGNAL_MSG += `<strong>🕘 Expiration 5M</strong>\n`;
             SIGNAL_MSG += `<strong>⏺ Entry at ${entryTime}</strong>\n\n`;
-            SIGNAL_MSG += `<strong>${this.Signal.direction}</strong>\n\n`;
+            SIGNAL_MSG += `<strong>${this.signal.direction}</strong>\n\n`;
             SIGNAL_MSG += `<strong>Telegram: <a href="https://t.me/gudtradewithmatthew">@gudtradewithmatthew</a></strong>\n\n`;
             SIGNAL_MSG += `<strong>🔽 MARTINGALE LEVELS</strong>\n`;
             SIGNAL_MSG += `<strong>1️⃣ LEVEL AT ${martingaleLevels[0]}</strong>\n`;
@@ -121,10 +302,10 @@ class ClimaxSignal {
             SIGNAL_MSG += `<strong>3️⃣ LEVEL AT ${martingaleLevels[2]}</strong>\n\n`;
             SIGNAL_MSG += `<strong><a href="https://shorturl.at/cehnV">💹 TRADE THIS SIGNAL HERE</a></strong>\n\n`;
             const timeAndDateSTamp = new Date().toISOString();
-            this.History.push({
+            sessionManager.saveSignal({
                 dateStamp: timeAndDateSTamp,
-                pair: this.Signal.pair,
-                direction: this.Signal.direction,
+                pair: this.signal.pair,
+                direction: this.signal.direction,
                 result: null,
                 initialTime: entryTime
             });
@@ -132,74 +313,49 @@ class ClimaxSignal {
         };
         this.getCurrencyPairTextFromCallbackData = (callbackData) => {
             var _a;
-            return (((_a = Object.values(this.CurrencyPairs)
+            return (((_a = Object.values(this.currencyPairs)
                 .flatMap((step) => (Array.isArray(step) ? step : []))
                 .flatMap((item) => (Array.isArray(item) ? item : [item]))
                 .find((item) => item.callback_data === callbackData)) === null || _a === void 0 ? void 0 : _a.text) || null);
         };
-        this.clearHistory = () => {
-            this.History = [];
-        };
-        this.getHistory = () => this.History;
-        this.setSignalResult = (resultString) => this.History[this.History.length - 1].result = resultString;
-        this.setLastStep = (step) => this.Signal.lastStep = step;
-        this.setPair = (pair) => this.Signal.pair = pair;
-        this.setHour = (hour) => this.Signal.hour = hour;
-        this.setMinute = (minute) => this.Signal.minute = minute;
-        this.setDirection = (direction) => this.Signal.direction = direction;
+        this.setLastStep = (step) => this.signal.lastStep = step;
+        this.setPair = (pair) => this.signal.pair = pair;
+        this.setHour = (hour) => this.signal.hour = hour;
+        this.setMinute = (minute) => this.signal.minute = minute;
+        this.setDirection = (direction) => this.signal.direction = direction;
         this.setAccurateSignalStep = (manualNext) => {
-            if (this.Signal.lastStep !== null) {
-                return this.Signal.lastStep;
+            if (this.signal.lastStep !== null) {
+                return this.signal.lastStep;
             }
             else {
                 return manualNext;
             }
         };
-        this.presentSignal = () => this.Signal;
+        this.presentSignal = () => this.signal;
         this.checkSignalObject = (action) => {
             if (action === "post_signal" &&
-                typeof this.Signal.hour === "number" &&
-                typeof this.Signal.minute === "number") {
+                typeof this.signal.hour === "number" &&
+                typeof this.signal.minute === "number") {
                 return true;
             }
             else {
                 return false;
             }
         };
-        this.checkSessionValidity = () => {
-            if (this.History[this.History.length - 1].result === null) {
-                return false;
-            }
-            else if (this.History.length === 0) {
-                return null;
-            }
-            else {
-                return true;
-            }
-        };
-        this.saveHistoryForDay = (sessionName, sessionHistory) => {
-            this.dayHistory[sessionName] = sessionHistory;
-            console.log("------ SESSION HISTORY SAVED FOR DAY ------");
-        };
-        this.getDayHistory = () => this.dayHistory;
-        this.clearDayHistory = () => {
-            this.dayHistory = {};
-        };
-        this.lastStep = () => this.Signal.lastStep;
-        this.step0 = () => this.CurrencyPairs.step0;
-        this.step1 = () => this.CurrencyPairs.step1;
-        this.step2 = () => this.CurrencyPairs.step2;
-        this.step3 = () => this.CurrencyPairs.step3;
-        this.text = () => this.CurrencyPairs.text;
-        this.Signal = {
+        this.lastStep = () => this.signal.lastStep;
+        this.step0 = () => this.currencyPairs.step0;
+        this.step1 = () => this.currencyPairs.step1;
+        this.step2 = () => this.currencyPairs.step2;
+        this.step3 = () => this.currencyPairs.step3;
+        this.text = () => this.currencyPairs.text;
+        this.signal = {
             pair: "",
             hour: 0,
             minute: 0,
             direction: "",
             lastStep: "pairs_0"
         };
-        this.History = [];
-        this.CurrencyPairs = {
+        this.currencyPairs = {
             text: "Choose a currency pair\n\nIf it's not here (almost impossible ;)...), choose a closely similar one and edit the post after i send it to the channel.\n\n",
             step0: [
                 [
@@ -331,10 +487,9 @@ class ClimaxSignal {
                 [{ text: "Cancel Operation", callback_data: "cancel_op" }],
             ],
         };
-        this.dayHistory = {};
     }
 }
-const signalManager = new ClimaxSignal();
+const signalManager = new SignalManager();
 class ResultManager {
     constructor() {
         this.callDirect = () => this.directWin;
@@ -346,7 +501,7 @@ class ResultManager {
         this.callLossType2Image = (fileId) => __awaiter(this, void 0, void 0, function* () {
             try {
                 const watermarkPath = `https://lh3.googleusercontent.com/pw/AP1GczPt3db3v4XAjMGyZIo94YUcG0Oqa4Shvq8SmBpheJ3Qz3Tk9BzQAhm-HC6kwQWQhy85PW9kPPGGkJAaYB7hn1kKP0SQ_sStZCNokOrMspgBWZetkBuwkNAFKHhMZD_GW43Edc771MVyDOYfAP9Com83QJFx6-xVRiHcNg-cQ7EkRXAZ2cKPaJzdeytdYB0GQO3UfHkEjbnK_CMOm_Cef0oqadY_8wgJYBKO5Ia_WCqcfT5oM2GlTrVyhx2ed6_FrBwi_BY9tihd8su0FnE7gNE6ceUr3vYd9w1jeZziPmHkPfa_xPbwr_WzqJmwNJDljyDRaBPlZYDiaUxuW0_KP5dETGtR_6LlqFF-3LB-axuq4GpbJaaUgDEn9MVaX207va7hN0xqHlBa7TYIaGEc0fANi38BR3DKdqLqFdWqPpUe6foiLNp8ON5Ib1yegjtfGW9s_-2kr_VtvPCLNHIMb_CHuHgfeOT8iBckYr_Hkg6aLu8R11eBgIyznxVLxidOR_ffs4bVB2u0XwOucs4eoFWIVvVcbkBQs-mE2RIggXyg8OBLFoNS-rGR3E8l8U5vLR3nlxrAU-ziH7GWO_wyWNB99UhoT7pfzxcpvfvyuCMrHrqnJ_mGsCaGFYxguUIDoTMyRWNQNPVXIi1Vg2HiP30ikiVWOLTiYxuJs3DRVGbxCJw87CwsDd685hTNAgdkSl3WrxM2me_NDW3Fke_aSZJNlRLCC728aljTp-iKSz_JuuP3-gKnzqluNVPLt7fmKhZXGC6ul7TiroUYLAuMr898F6kyz53BYlVp4va0WljphF7QNE_BSUJk8JyGMAfQnKNb3wlMiOm17lUYEh_V0-xe8xko5Y8ov3ozarTVgT4V5-BrDPQD1GxLwnvisc9LxnGAP5id5utAzsq9K3I3lv-yx8S6XXM1XQD-897VKwUPhVKJogmlIUmJwphN9oocdxAET8WWmUDitwtJoA=w691-h590-no?authuser=0`;
-                const mainPhotoPath = yield downloadAndSavePhoto(fileId);
+                const mainPhotoPath = yield sessionManager.downloadAndSavePhoto(fileId);
                 const quickChartLink = `https://quickchart.io/watermark?mainImageUrl=${mainPhotoPath.fileUrl}&markImageUrl=${watermarkPath}&markRatio=0.7&position=center&opacity=1`;
                 return quickChartLink;
             }
@@ -536,59 +691,6 @@ class ClimaxManager {
             const messageObject = messageBankData.find((dataObject) => Object.keys(findObject).every(key => dataObject[key] === findObject[key]));
             return messageObject;
         };
-        this.sendSessionEndMessage = (signalHistory, sessionName) => {
-            const sessionEndPhotoPath = join(__dirname, "./media/imgs/brand/session_end.jpg");
-            const sessionEndPhotoStream = createReadStream(sessionEndPhotoPath);
-            const countWinsAndLosses = (history) => {
-                return history.reduce((acc, entry) => ({
-                    wins: acc.wins + (entry.result.includes("WIN") ? 1 : 0),
-                    losses: acc.losses + (!(entry.result.includes("WIN")) ? 1 : 0),
-                }), { wins: 0, losses: 0 });
-            };
-            const sessionResult = countWinsAndLosses(signalHistory);
-            let sessionIcon = "";
-            switch (sessionName) {
-                case "OVERNIGHT":
-                    sessionIcon = "🌑";
-                    break;
-                case "MORNING":
-                    sessionIcon = "🌙";
-                    break;
-                case "AFTERNOON":
-                    sessionIcon = "☀";
-                    break;
-                default:
-                    break;
-            }
-            const accuracyPercentage = (wins, losses) => {
-                const totalSignals = wins + losses;
-                const per = wins / totalSignals;
-                return `${(per * 100).toFixed(2)}%`;
-            };
-            let SESSION_END_MSG = `<strong>📝 REPORT</strong>\n`;
-            SESSION_END_MSG += `<strong>${sessionIcon} ${sessionName} SESSION</strong>\n\n`;
-            SESSION_END_MSG += `<blockquote>`;
-            signalHistory.map((history) => {
-                SESSION_END_MSG += `<code><strong>${history.initialTime} • ${history.pair} • ${(history.result !== null) ? history.result.split("-")[0] : history.direction}</strong></code>\n`;
-            });
-            SESSION_END_MSG += `\n</blockquote>\n`;
-            SESSION_END_MSG += `<strong>${(returnEmoji(sessionResult.wins.toString()))} ${(sessionResult.wins > 1) ? "WINS" : "WIN"} - ${(returnEmoji(sessionResult.losses.toString()))} ${(sessionResult.losses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
-            SESSION_END_MSG += `<strong>❇️ Accuracy: ${accuracyPercentage(sessionResult.wins, sessionResult.losses)}%</strong>\n\n`;
-            SESSION_END_MSG += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
-            bot.sendPhoto(T_W_M, sessionEndPhotoStream, {
-                parse_mode: "HTML",
-                caption: SESSION_END_MSG,
-                reply_markup: {
-                    "inline_keyboard": [
-                        [{ "text": "CREATE AN ACCOUNT HERE", "url": "https://shorturl.at/cehnV" }],
-                        [{ "text": "OPEN BROKER HERE", "url": "https://shorturl.at/cehnV" }],
-                        [{ "text": "CONTACT SUPPORT HERE", "url": "https://t.me/twmsupports" }]
-                    ]
-                }
-            }, {
-                contentType: "application/octet-stream"
-            });
-        };
         this.sendToChannel = (text, chatId, messageOption = undefined, successMessage, type = "text") => {
             if (type === "text") {
                 if (messageOption === undefined) {
@@ -749,33 +851,6 @@ class ClimaxManager {
             }
             return true;
         };
-        this.seshNameByTime = () => {
-            const now = new Date();
-            const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
-            const londonOffset = 1;
-            const londonTime = new Date(utcTime + (londonOffset * 3600000));
-            const hours = londonTime.getHours();
-            const minutes = londonTime.getMinutes();
-            const timeInMinutes = hours * 60 + minutes;
-            const overnightStart = 6 * 60 + 30;
-            const overnightEnd = 10 * 60 + 30;
-            const morningStart = 11 * 60 + 30;
-            const morningEnd = 16 * 60 + 30;
-            const afternoonStart = 17 * 60 + 30;
-            const afternoonEnd = 22 * 60 + 30;
-            if (timeInMinutes >= overnightStart && timeInMinutes <= overnightEnd) {
-                return "OVERNIGHT";
-            }
-            else if (timeInMinutes >= morningStart && timeInMinutes <= morningEnd) {
-                return "MORNING";
-            }
-            else if (timeInMinutes >= afternoonStart && timeInMinutes <= afternoonEnd) {
-                return "AFTERNOON";
-            }
-            else {
-                return "OUTSIDE SESSION";
-            }
-        };
         this.sendDayEndMessage = (dayHistory, chatId) => {
             const sessionOfDay = Object.keys(dayHistory);
             const getDayFormatted = () => {
@@ -819,7 +894,7 @@ class ClimaxManager {
                 });
             }
             mts += `\n</pre>\n\n`;
-            mts += `<strong>${returnEmoji(tWins.toString())} ${(tWins > 1) ? "WINS" : "WIN"} - ${returnEmoji(tLosses.toString())} ${(tLosses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
+            mts += `<strong>${sessionManager.returnEmoji(tWins.toString())} ${(tWins > 1) ? "WINS" : "WIN"} - ${sessionManager.returnEmoji(tLosses.toString())} ${(tLosses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
             mts += `<strong>❇️ Accuracy: ${accuracyPercentage(tWins, tLosses)}</strong>\n\n`;
             mts += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
             bot.sendMessage(T_W_M, mts, {
@@ -852,7 +927,7 @@ class ClimaxManager {
 }
 const botManager = new ClimaxManager();
 const handleSessionEnd = (sessionName, chatId, called = false) => {
-    const signalHistory = signalManager.getHistory();
+    const signalHistory = sessionManager.getHistory();
     if (called && signalHistory.length === 0) {
         bot.sendMessage(chatId, "No signal has been sent this session, so there's nothing to end");
         return;
@@ -872,18 +947,18 @@ const handleSessionEnd = (sessionName, chatId, called = false) => {
             bot.sendMessage(chatId, `Do you want to post the session end message for ${sessionName} session?`, options)
                 .then(sentMessage => {
                 const messageId = sentMessage.message_id;
-                const sessionCanEnd = signalManager.checkSessionValidity();
+                const sessionCanEnd = sessionManager.checkSessionValidity();
                 const timeoutId = setTimeout(() => {
                     if (!sessionCanEnd) {
                         bot.sendMessage(chatId, "Session has a signal without a result, can't end session yet...");
                         return;
                     }
                     if (sessionCanEnd) {
-                        botManager.sendSessionEndMessage(signalHistory, sessionName);
-                        const prSh = botManager.seshNameByTime();
-                        signalManager.saveHistoryForDay(prSh, signalHistory);
+                        sessionManager.sendSessionEndMessage();
+                        const prSh = sessionManager.getPostTime();
+                        // signalManager.saveHistoryForDay(prSh, signalHistory);
                         botManager.setLastBotMessageId(chatId, 0);
-                        signalManager.clearHistory();
+                        // signalManager.clearHistory();
                         bot.editMessageText("Session end message successfully posted...automatically", {
                             chat_id: chatId,
                             message_id: messageId
@@ -902,10 +977,10 @@ const handleSessionEnd = (sessionName, chatId, called = false) => {
                                 bot.sendMessage(chatId, "Session has a signal without a result, can't end session yet...");
                                 return;
                             }
-                            botManager.sendSessionEndMessage(signalHistory, sessionName);
-                            const prSh = botManager.seshNameByTime();
-                            signalManager.saveHistoryForDay(prSh, signalHistory);
-                            signalManager.clearHistory();
+                            sessionManager.sendSessionEndMessage();
+                            const prSh = sessionManager.getPostTime();
+                            // signalManager.saveHistoryForDay(prSh, signalHistory);
+                            // signalManager.clearHistory();
                             botManager.setLastBotMessageId(chatId, 0);
                             bot.editMessageText("Session end message successfully posted...", {
                                 chat_id: chatId,
@@ -930,11 +1005,12 @@ const handleSessionEnd = (sessionName, chatId, called = false) => {
     }
 };
 const handleDayEnd = () => {
-    const historyOfDay = signalManager.getDayHistory();
+    // const historyOfDay = signalManager.getDayHistory();
     const lastAdmin = botManager.getLastAdmin();
     if (lastAdmin !== null) {
-        botManager.sendDayEndMessage(historyOfDay, lastAdmin);
-        signalManager.clearDayHistory();
+        console.log("HAnding Day End!");
+        // botManager.sendDayEndMessage(historyOfDay, lastAdmin);
+        // signalManager.clearDayHistory();
     }
     else {
         console.log("No admin found to send day end message");
@@ -963,7 +1039,7 @@ const scheduleClimaxCrons = () => {
                 if (MBMO !== undefined) {
                     cron.schedule(cronExpression, () => {
                         if (cronJob.id === "overnight_start" || cronJob.id === "morning_start" || cronJob.id === "afternoon_start") {
-                            const prSesh = botManager.seshNameByTime();
+                            const prSesh = sessionManager.getPostTime();
                             botManager.setPresentSession(prSesh || cronJob.id.split("_")[0].toLocaleUpperCase());
                             console.log(`......New session commences: ${prSesh || cronJob.id.split("_")[0].toLocaleUpperCase()} SESSION`);
                         }
@@ -1186,23 +1262,23 @@ bot.on("callback_query", (callbackQuery) => __awaiter(void 0, void 0, void 0, fu
         }
         if (winRegex.test(action) || action === "lossBoth") {
             if (action === "martingale0") {
-                signalManager.setSignalResult(resultManager.callDirect());
+                sessionManager.saveResult(resultManager.callDirect());
                 climaxPostOnCreation.setState("presentSignalResult", resultManager.callDirect());
             }
             if (action === "martingale1") {
-                signalManager.setSignalResult(resultManager.callMartingale1());
+                sessionManager.saveResult(resultManager.callMartingale1());
                 climaxPostOnCreation.setState("presentSignalResult", resultManager.callMartingale1());
             }
             if (action === "martingale2") {
-                signalManager.setSignalResult(resultManager.callMartingale2());
+                sessionManager.saveResult(resultManager.callMartingale2());
                 climaxPostOnCreation.setState("presentSignalResult", resultManager.callMartingale2());
             }
             if (action === "martingale3") {
-                signalManager.setSignalResult(resultManager.callMartingale3());
+                sessionManager.saveResult(resultManager.callMartingale3());
                 climaxPostOnCreation.setState("presentSignalResult", resultManager.callMartingale3());
             }
             if (action === "lossBoth") {
-                signalManager.setSignalResult("❌ LOSS");
+                sessionManager.saveResult("❌ LOSS");
                 climaxPostOnCreation.setState("presentSignalResult", resultManager.callLossType1());
             }
             climaxPostOnCreation.setState("chosenSignalResult", true);
@@ -1279,7 +1355,7 @@ bot.onText(/\/endsession/, (msg) => {
     var _a;
     const presentSession = botManager.getPresentSession();
     const chatId = (_a = msg.from) === null || _a === void 0 ? void 0 : _a.id;
-    const prSesh = botManager.seshNameByTime();
+    const prSesh = sessionManager.getPostTime();
     handleSessionEnd(prSesh || presentSession, chatId, true);
 });
 bot.onText(/\/endday/, (msg) => {
@@ -1289,8 +1365,8 @@ bot.onText(/\/endday/, (msg) => {
     handleDayEnd();
 });
 app.get("/", (req, res) => {
-    res.send("Halskey_TWM v2.0.1 is running...");
+    res.send("Halskey_TWM v2.0.3 is running...");
 });
 app.listen(port, () => {
-    console.log("Halskey_TWM v2.0.1 is running...");
+    console.log("Halskey_TWM v2.0.3 is running...");
 });
