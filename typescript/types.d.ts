@@ -27,10 +27,9 @@ export interface Signal {
 }
 
 
-export type ISO8601Date = string;
+export type ISO8601Date = Date;
 
 export interface History {
-  dateStamp: ISO8601Date;
   pair: string;
   direction: string;
   result: string | null;
@@ -137,12 +136,12 @@ export interface WTS {
   name: string;
   id: string;
   text?: string;
-  image?: string;
+  image?: string | boolean;
   video?: {
     width: number;
     height: number;
     path: string;
-  };
+  } | boolean;
   entities?: TelegramBot.MessageEntity[];
   replyMarkup?: TelegramBot.InlineKeyboardMarkup;
   otherOptions?: TelegramBot.Message;
@@ -164,4 +163,37 @@ export type ClimaxPostState = {
   presentSignalResult: string;
   resultImagePath: string;
   lastPreviewMessageId: number;
+}
+
+// DATABASE TYPES
+
+export interface DBSignal {
+  id: string;
+  session: string;
+  date_stamp: ISO8601Date;
+  pair: string;
+  direction: string;
+  result: string;
+  initial_time: string;
+  telegram_id: string;
+}
+
+export interface DBCron {
+  id: number;
+  name: string;
+  cron_id: string;
+  schedule: string[];
+  timezone: string;
+  telegram_id: string;
+}
+
+export interface DBCronPost {
+  id: number;
+  name: string;
+  message_id: string;
+  text: string;
+  image: boolean;
+  video: boolean;
+  telegram_id: string;
+  replyMarkup: TelegramBot.InlineKeyboardMarkup;
 }

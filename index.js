@@ -8,13 +8,14 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 import TelegramBot from "node-telegram-bot-api";
-import { v4 as uuidv4, } from "uuid";
+import { v4 as uuidv4 } from "uuid";
+import Database from "./database.js";
 import express from "express";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { writeFileSync, createReadStream } from "fs";
 import cron from "node-cron";
 import axios from "axios";
-import { readFileSync, writeFileSync, createReadStream } from "fs";
 import dotenv from "dotenv";
 dotenv.config();
 process.env["NTBA_FIX_350"] = "1";
@@ -32,8 +33,6 @@ const bot = new TelegramBot(token, {
 });
 const TWM_ADMIN = Number(process.env.OWNER);
 const INCENIX = Number(process.env.INCENIX);
-const T_W_M = Number(process.env.CHANNEL);
-const atomix = Number(process.env.ATOMIX);
 const authorize = (chatId) => {
     if (chatId === INCENIX || chatId === TWM_ADMIN) {
         return true;
@@ -42,14 +41,17 @@ const authorize = (chatId) => {
         return false;
     }
 };
-const DATABASE = {
-    POSTS: join(__dirname, "./database/posts.json"),
-    HISTORY: join(__dirname, "./database/history.json"),
-    CRONS: join(__dirname, "./database/crons.json"),
+const messageVideoDetails = {
+    width: 622,
+    height: 1280,
+    path: "/brand/TWM_Video_Instructions.mp4"
 };
+const db = new Database("tradewithmatthew");
+const channelId = db.getChannelId();
+// const channelId: ChatId = Number(process.env.ATOMIX); //test
 class Session {
     constructor() {
-        this.getPostTime = () => {
+        this.getPresentSession = () => {
             const now = new Date();
             const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
             const londonOffset = 1;
@@ -96,84 +98,47 @@ class Session {
             return modString;
         };
         this.downloadAndSavePhoto = (fileId) => __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            let fileRelativePath = undefined;
             let fileUrl = "";
             if (fileId !== undefined) {
                 try {
                     const filetoGet = yield bot.getFile(fileId);
-                    const fileName = (_a = filetoGet.file_path) === null || _a === void 0 ? void 0 : _a.replace("photos/", "").trim();
                     fileUrl = `https://api.telegram.org/file/bot${token}/${filetoGet.file_path}`;
-                    const downloadPath = join(__dirname, "./media/imgs");
-                    fileRelativePath =
-                        fileName !== undefined
-                            ? join(__dirname, "./media/imgs/", fileName)
-                            : undefined;
-                    yield bot.downloadFile(fileId, downloadPath);
-                    console.log("Photo downloaded successfully...");
+                    console.log("Photo url tracked...");
                 }
                 catch (err) {
                     console.log("Error downloading photo");
-                    fileRelativePath = undefined;
+                    console.error(err);
                 }
             }
             else {
                 console.log("No photo found ...or photo has no file_id");
             }
-            return { fileRelativePath, fileUrl };
+            return fileUrl;
         });
         this.downloadMarkedPhoto = (url) => __awaiter(this, void 0, void 0, function* () {
-            const filename = `${uuidv4()}.png`;
-            const filePath = join(__dirname, '../media/imgs', filename);
+            let filename = null;
+            let filePath = "";
             try {
                 const response = yield axios({
                     url,
                     method: 'GET',
                     responseType: 'arraybuffer',
+                    timeout: 30000
                 });
+                filename = `${uuidv4()}.png`;
+                filePath = join(__dirname, './media/imgs', filename);
                 writeFileSync(filePath, response.data, 'binary');
-                console.log(`Image downloaded and saved as ${filename}`);
-                return { status: true, filename };
+                return { status: true, filename, filePath };
             }
             catch (error) {
                 console.error('Error downloading the image:', error);
-                return { status: false, filename };
+                return { status: false, filename: null, filePath: null };
             }
         });
-        this.saveSignal = (signalObject) => {
-            try {
-                const historyDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
-                const historyDB = JSON.parse(historyDBRaw);
-                const presentSession = this.getPostTime();
-                historyDB[presentSession].push(signalObject);
-                writeFileSync(DATABASE.HISTORY, JSON.stringify(historyDB), { encoding: 'utf8' });
-                return { status: true };
-            }
-            catch (err) {
-                console.error(err);
-                return { status: false };
-            }
-        };
-        this.saveResult = (result) => {
-            try {
-                const resultDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
-                const resultDB = JSON.parse(resultDBRaw);
-                const presentSession = this.getPostTime();
-                resultDB[presentSession].at(-1).result = result;
-                writeFileSync(DATABASE.HISTORY, JSON.stringify(resultDB), { encoding: 'utf8' });
-                return { status: true };
-            }
-            catch (err) {
-                console.error(err);
-                return { status: false };
-            }
-        };
-        this.getHistory = () => {
-            const presentSession = this.getPostTime();
-            const historyDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
-            const historyDB = JSON.parse(historyDBRaw);
-            return historyDB[presentSession];
-        };
+        this.checkSessionValidity = () => __awaiter(this, void 0, void 0, function* () {
+            const nullResultSignals = yield db.validate();
+            return (nullResultSignals.length === 0) ? true : false;
+        });
         this.getSessionAccuracy = (wins, losses) => {
             const totalSignals = wins + losses;
             const per = wins / totalSignals;
@@ -182,25 +147,8 @@ class Session {
                 percentage: `${(per * 100).toFixed(2)}%`
             };
         };
-        this.checkSessionValidity = () => {
-            const presentSession = this.getPostTime();
-            const historyDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
-            const historyDB = JSON.parse(historyDBRaw);
-            if (historyDB[presentSession].at(-1).result === null) {
-                return false;
-            }
-            else if (historyDB[presentSession].length === 0) {
-                return null;
-            }
-            else {
-                return true;
-            }
-        };
-        this.sendSessionEndMessage = () => {
+        this.sendSessionEndMessage = (presentSession, historyDB) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const historyDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
-                const historyDB = JSON.parse(historyDBRaw);
-                const presentSession = this.getPostTime();
                 const sessionEndPhotoPath = join(__dirname, "./media/imgs/brand/session_end.jpg");
                 const sessionEndPhotoStream = createReadStream(sessionEndPhotoPath);
                 const countWinsAndLosses = (history) => {
@@ -209,7 +157,7 @@ class Session {
                         losses: acc.losses + (!(entry.result.includes("WIN")) ? 1 : 0),
                     }), { wins: 0, losses: 0 });
                 };
-                const sessionResult = countWinsAndLosses(historyDB[presentSession]);
+                const sessionResult = countWinsAndLosses(historyDB);
                 let sessionIcon = "";
                 switch (presentSession) {
                     case "OVERNIGHT":
@@ -232,14 +180,14 @@ class Session {
                 let SESSION_END_MSG = `<strong>📝 REPORT</strong>\n`;
                 SESSION_END_MSG += `<strong>${sessionIcon} ${presentSession} SESSION</strong>\n\n`;
                 SESSION_END_MSG += `<blockquote>`;
-                historyDB[presentSession].map((history) => {
-                    SESSION_END_MSG += `<code><strong>${history.initialTime} • ${history.pair} • ${(history.result !== null) ? history.result.split("-")[0] : history.direction}</strong></code>\n`;
+                historyDB.map((history) => {
+                    SESSION_END_MSG += `<code><strong>${history.initial_time} • ${history.pair} • ${(history.result !== null) ? history.result.split("-")[0] : history.direction}</strong></code>\n`;
                 });
-                SESSION_END_MSG += `\n</blockquote>\n`;
+                SESSION_END_MSG += `</blockquote>\n`;
                 SESSION_END_MSG += `<strong>${(sessionManager.returnEmoji(sessionResult.wins.toString()))} ${(sessionResult.wins > 1) ? "WINS" : "WIN"} - ${(sessionManager.returnEmoji(sessionResult.losses.toString()))} ${(sessionResult.losses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
-                SESSION_END_MSG += `<strong>❇️ Accuracy: ${accuracyPercentage(sessionResult.wins, sessionResult.losses)}%</strong>\n\n`;
+                SESSION_END_MSG += `<strong>❇️ Accuracy: ${accuracyPercentage(sessionResult.wins, sessionResult.losses)}</strong>\n\n`;
                 SESSION_END_MSG += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
-                bot.sendPhoto(T_W_M, sessionEndPhotoStream, {
+                bot.sendPhoto(channelId, sessionEndPhotoStream, {
                     parse_mode: "HTML",
                     caption: SESSION_END_MSG,
                     reply_markup: {
@@ -256,25 +204,204 @@ class Session {
             catch (error) {
                 console.error(error);
             }
+        });
+        this.endSession = (chatId_1, ...args_1) => __awaiter(this, [chatId_1, ...args_1], void 0, function* (chatId, called = false) {
+            const presentSession = this.getPresentSession();
+            const signalHistory = yield db.getSessionSignals(presentSession);
+            if (called && signalHistory.length === 0) {
+                bot.sendMessage(chatId, "No signal has been sent this session, so there's nothing to end");
+                return;
+            }
+            if (signalHistory.length !== 0) {
+                try {
+                    const options = {
+                        reply_markup: {
+                            inline_keyboard: [
+                                [
+                                    { text: 'Yes', callback_data: 'yes' },
+                                    { text: 'No', callback_data: 'no' }
+                                ]
+                            ]
+                        }
+                    };
+                    bot.sendMessage(chatId, `Do you want to post the session end message for ${presentSession} session?`, options)
+                        .then((sentMessage) => __awaiter(this, void 0, void 0, function* () {
+                        const messageId = sentMessage.message_id;
+                        const sessionCanEnd = yield this.checkSessionValidity();
+                        const timeoutId = setTimeout(() => {
+                            if (!sessionCanEnd) {
+                                bot.sendMessage(chatId, "Session has a signal without a result, can't end session yet...");
+                                return;
+                            }
+                            if (sessionCanEnd) {
+                                this.sendSessionEndMessage(presentSession, signalHistory);
+                                botManager.setLastBotMessageId(chatId, 0);
+                                bot.editMessageText("Session end message successfully posted...automatically", {
+                                    chat_id: chatId,
+                                    message_id: messageId
+                                });
+                                console.log("---------------------------------");
+                                console.log("------- SESSION ENDED -----------");
+                            }
+                        }, 5 * 60 * 1000);
+                        bot.on('callback_query', callbackQuery => {
+                            var _a;
+                            if (((_a = callbackQuery.message) === null || _a === void 0 ? void 0 : _a.message_id) === messageId) {
+                                clearTimeout(timeoutId);
+                                const response = callbackQuery.data;
+                                if (response === 'yes' && sessionCanEnd) {
+                                    if (!sessionCanEnd) {
+                                        bot.sendMessage(chatId, "Session has a signal without a result, can't end session yet...");
+                                        return;
+                                    }
+                                    sessionManager.sendSessionEndMessage(presentSession, signalHistory);
+                                    botManager.setLastBotMessageId(chatId, 0);
+                                    bot.editMessageText("Session end message successfully posted...", {
+                                        chat_id: chatId,
+                                        message_id: messageId
+                                    });
+                                    console.log("---------------------------------");
+                                    console.log("------- SESSION ENDED -----------");
+                                }
+                                if (response === 'no' && sessionCanEnd) {
+                                    bot.editMessageText("Okay, but you will need to end the session manually...YOURSELF", {
+                                        chat_id: chatId,
+                                        message_id: messageId
+                                    });
+                                }
+                            }
+                        });
+                    }));
+                }
+                catch (err) {
+                    bot.sendMessage(chatId, "Unable to send session end message for some reason. Please try again..");
+                }
+            }
+        });
+        this.endDay = (chatId) => {
+            bot.sendMessage(chatId, "Please wait... curating signals")
+                .then((sentMessage) => __awaiter(this, void 0, void 0, function* () {
+                const dayHistory = yield db.getDaySignals();
+                const sessions = {
+                    OVERNIGHT: 'OVERNIGHT SESSION',
+                    MORNING: 'MORNING SESSION',
+                    AFTERNOON: 'AFTERNOON SESSION',
+                    OUTSIDE: 'OUTSIDE SESSION'
+                };
+                const getDayFormatted = () => {
+                    const today = new Date();
+                    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                    const dayOfMonth = today.getDate();
+                    const ordinalSuffix = (n) => ['th', 'st', 'nd', 'rd'][((n % 100) - 20) % 10] || 'th';
+                    return `${daysOfWeek[today.getDay()]}, ${months[today.getMonth()]} ${dayOfMonth}${ordinalSuffix(dayOfMonth)}, ${today.getFullYear()}`;
+                };
+                let tWins = 0;
+                let tLosses = 0;
+                const countWinsAndLosses = (history) => {
+                    const { wins, losses } = history.reduce((acc, signal) => {
+                        if (signal.result && signal.result.includes("WIN")) {
+                            acc.wins += 1;
+                        }
+                        else {
+                            acc.losses += 1;
+                        }
+                        return acc;
+                    }, { wins: 0, losses: 0 });
+                    tWins += wins;
+                    tLosses += losses;
+                };
+                const accuracyPercentage = (wins, losses) => {
+                    const totalSignals = wins + losses;
+                    const per = wins / totalSignals;
+                    return `${(per * 100).toFixed(2)}%`;
+                };
+                countWinsAndLosses(dayHistory);
+                let mts = `<strong>🧾 DAILY REPORT</strong>\n`;
+                mts += `<strong>🗓 ${getDayFormatted()}</strong>\n\n`;
+                mts += `<pre>\n`;
+                Object.keys(sessions).forEach(session => {
+                    mts += `<strong>${sessions[session]}</strong>\n<strong><code>➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖</code></strong>\n`;
+                    dayHistory.filter(item => item.session === session)
+                        .forEach(item => {
+                        mts += `<strong><code>${item.initial_time} • ${item.pair} • ${(item.result !== null) ? item.result.split("-")[0] : item.direction}</code></strong>\n`;
+                    });
+                    mts += '\n';
+                });
+                mts += `</pre>\n`;
+                mts += `<strong>${sessionManager.returnEmoji(tWins.toString())} ${(tWins > 1) ? "WINS" : "WIN"} - ${sessionManager.returnEmoji(tLosses.toString())} ${(tLosses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
+                mts += `<strong>❇️ Accuracy: ${accuracyPercentage(tWins, tLosses)}</strong>\n\n`;
+                mts += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
+                bot.deleteMessage(chatId, sentMessage.message_id)
+                    .then(() => {
+                    console.log("Sending message...");
+                    bot.sendMessage(channelId, mts, {
+                        parse_mode: "HTML",
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: "SHARE TESTIMONY", url: "https://t.me/twmsupports" }],
+                                [{ text: "LEARN HOW TO TRADE", url: "https://telegra.ph/STRICT-INSTRUCTIONS-ON-HOW-TO-TRADE-SUCCESSFULLY-02-09" }],
+                            ]
+                        }
+                    }).then(() => {
+                        bot.sendMessage(chatId, "Day End Message Sent Successsfully!");
+                        console.log('|| ===== DAILY REPORT SENT SUCCESSFULLY ===== ||');
+                    });
+                });
+            }));
         };
+        this.scheduleClimaxCrons = () => __awaiter(this, void 0, void 0, function* () {
+            console.log("Will schedule all Channel crons...");
+            const cronFileData = yield db.getChannelCrons();
+            const cronPosts = yield db.getChannelCronPosts();
+            cronFileData.forEach((cronJob) => {
+                // console.log(`Running ${cronJob.name} job at..`);
+                cronJob.schedule.forEach((cronExpression) => __awaiter(this, void 0, void 0, function* () {
+                    if (cronJob.cron_id === "session_end") {
+                        cron.schedule(cronExpression, () => {
+                            const lastController = botManager.getLastAdmin();
+                            sessionManager.endSession(lastController);
+                        }, { timezone: cronJob.timezone });
+                    }
+                    else if (cronJob.cron_id === "day_end") {
+                        cron.schedule(cronExpression, () => {
+                            const lastController = botManager.getLastAdmin();
+                            sessionManager.endDay(lastController);
+                        }, { timezone: cronJob.timezone });
+                    }
+                    else {
+                        if (cronPosts.length !== 0) {
+                            cron.schedule(cronExpression, () => {
+                                let modifiedDBPost = {
+                                    name: "",
+                                    id: ""
+                                };
+                                const cronToPost = cronPosts.find(pst => pst.message_id === cronJob.cron_id);
+                                if (cronToPost === null || cronToPost === void 0 ? void 0 : cronToPost.video) {
+                                    modifiedDBPost = Object.assign(Object.assign({}, cronToPost), { id: cronToPost.message_id, video: messageVideoDetails });
+                                }
+                                if (cronToPost === null || cronToPost === void 0 ? void 0 : cronToPost.image) {
+                                    modifiedDBPost = Object.assign(Object.assign({}, cronToPost), { id: cronToPost.message_id, image: join(__dirname, './media/imgs/brand/', cronToPost.message_id) });
+                                }
+                                if (cronJob.cron_id === "overnight_start" || cronJob.cron_id === "morning_start" || cronJob.cron_id === "afternoon_start") {
+                                    const prSesh = sessionManager.getPresentSession();
+                                    console.log(`...New session commences: ${prSesh || cronJob.cron_id.split("_")[0].toLocaleUpperCase()} SESSION`);
+                                }
+                                (Object.keys(modifiedDBPost).length === 0) && botManager.sendMessageByType(modifiedDBPost, channelId);
+                            }, { timezone: cronJob.timezone });
+                        }
+                    }
+                }));
+            });
+        });
         this.history = [];
         this.dayHistory = {};
     }
 }
 const sessionManager = new Session();
-sessionManager.saveSignal({
-    dateStamp: "new Date()",
-    pair: "AUD / CAD",
-    direction: "HIGHER",
-    result: null,
-    initialTime: "13:34"
-});
-setTimeout(() => {
-    sessionManager.saveResult("WIN");
-}, 2000);
 class SignalManager {
     constructor() {
-        this.createNewSignal = () => {
+        this.createNewSignal = () => __awaiter(this, void 0, void 0, function* () {
             const padZero = (num) => num.toString().padStart(2, "0");
             const getNextTime = (h, m, increment) => {
                 m += increment;
@@ -301,16 +428,15 @@ class SignalManager {
             SIGNAL_MSG += `<strong>2️⃣ LEVEL AT ${martingaleLevels[1]}</strong>\n`;
             SIGNAL_MSG += `<strong>3️⃣ LEVEL AT ${martingaleLevels[2]}</strong>\n\n`;
             SIGNAL_MSG += `<strong><a href="https://shorturl.at/cehnV">💹 TRADE THIS SIGNAL HERE</a></strong>\n\n`;
-            const timeAndDateSTamp = new Date().toISOString();
-            sessionManager.saveSignal({
-                dateStamp: timeAndDateSTamp,
+            const presentSession = sessionManager.getPresentSession();
+            yield db.saveSignal({
                 pair: this.signal.pair,
                 direction: this.signal.direction,
                 result: null,
                 initialTime: entryTime
-            });
+            }, presentSession);
             return SIGNAL_MSG;
-        };
+        });
         this.getCurrencyPairTextFromCallbackData = (callbackData) => {
             var _a;
             return (((_a = Object.values(this.currencyPairs)
@@ -501,24 +627,24 @@ class ResultManager {
         this.callLossType2Image = (fileId) => __awaiter(this, void 0, void 0, function* () {
             try {
                 const watermarkPath = `https://lh3.googleusercontent.com/pw/AP1GczPt3db3v4XAjMGyZIo94YUcG0Oqa4Shvq8SmBpheJ3Qz3Tk9BzQAhm-HC6kwQWQhy85PW9kPPGGkJAaYB7hn1kKP0SQ_sStZCNokOrMspgBWZetkBuwkNAFKHhMZD_GW43Edc771MVyDOYfAP9Com83QJFx6-xVRiHcNg-cQ7EkRXAZ2cKPaJzdeytdYB0GQO3UfHkEjbnK_CMOm_Cef0oqadY_8wgJYBKO5Ia_WCqcfT5oM2GlTrVyhx2ed6_FrBwi_BY9tihd8su0FnE7gNE6ceUr3vYd9w1jeZziPmHkPfa_xPbwr_WzqJmwNJDljyDRaBPlZYDiaUxuW0_KP5dETGtR_6LlqFF-3LB-axuq4GpbJaaUgDEn9MVaX207va7hN0xqHlBa7TYIaGEc0fANi38BR3DKdqLqFdWqPpUe6foiLNp8ON5Ib1yegjtfGW9s_-2kr_VtvPCLNHIMb_CHuHgfeOT8iBckYr_Hkg6aLu8R11eBgIyznxVLxidOR_ffs4bVB2u0XwOucs4eoFWIVvVcbkBQs-mE2RIggXyg8OBLFoNS-rGR3E8l8U5vLR3nlxrAU-ziH7GWO_wyWNB99UhoT7pfzxcpvfvyuCMrHrqnJ_mGsCaGFYxguUIDoTMyRWNQNPVXIi1Vg2HiP30ikiVWOLTiYxuJs3DRVGbxCJw87CwsDd685hTNAgdkSl3WrxM2me_NDW3Fke_aSZJNlRLCC728aljTp-iKSz_JuuP3-gKnzqluNVPLt7fmKhZXGC6ul7TiroUYLAuMr898F6kyz53BYlVp4va0WljphF7QNE_BSUJk8JyGMAfQnKNb3wlMiOm17lUYEh_V0-xe8xko5Y8ov3ozarTVgT4V5-BrDPQD1GxLwnvisc9LxnGAP5id5utAzsq9K3I3lv-yx8S6XXM1XQD-897VKwUPhVKJogmlIUmJwphN9oocdxAET8WWmUDitwtJoA=w691-h590-no?authuser=0`;
-                const mainPhotoPath = yield sessionManager.downloadAndSavePhoto(fileId).catch((err) => {
+                const resultTgImageUrl = yield sessionManager.downloadAndSavePhoto(fileId).catch((err) => {
                     console.error(err);
                     return null;
                 });
-                if (mainPhotoPath !== null) {
-                    const quickChartLink = `https://quickchart.io/watermark?mainImageUrl=${mainPhotoPath.fileUrl}&markImageUrl=${watermarkPath}&markRatio=0.6&position=center&opacity=0.65`;
+                if (resultTgImageUrl !== null) {
+                    const quickChartLink = `https://quickchart.io/watermark?mainImageUrl=${resultTgImageUrl}&markImageUrl=${watermarkPath}&markRatio=0.6&position=center&opacity=0.65`;
                     const watermarkImage = yield sessionManager.downloadMarkedPhoto(quickChartLink).then(result => {
                         console.log('Download Status:', result.status);
                         console.log('Saved as:', result.filename);
-                        return result.filename;
+                        return result.filePath;
                     });
-                    const filePath = join(__dirname, '../media/imgs', watermarkImage);
-                    return filePath;
+                    return watermarkImage;
                 }
             }
             catch (error) {
                 console.error("Error adding watermark:", error);
             }
+            return null;
         });
         this.directWin = "✅ WIN⁰ ✅ - Direct WIN 🏆👏";
         this.martingale1 = "✅ WIN¹ ✅ - Victory in Martingale 1 🫵";
@@ -682,7 +808,7 @@ class ClimaxPostCreation {
     }
 }
 const climaxPostOnCreation = new ClimaxPostCreation();
-class ClimaxManager {
+class BotManager {
     constructor() {
         this.lastBotMessageId = (chatId) => this.CONVERSATIONS[chatId].lastBotMessageId;
         this.setLastAdmin = (chatId) => {
@@ -691,23 +817,14 @@ class ClimaxManager {
         this.setLastBotMessageId = (chatId, messageId) => {
             this.CONVERSATIONS[chatId].lastBotMessageId = messageId;
         };
-        this.setPresentSession = (sessionName) => {
-            this.presentSession = sessionName;
-        };
         this.getLastAdmin = () => this.lastAdmin;
         this.getPresentSession = () => this.presentSession;
-        this.getMessageFromBank = (findObject) => {
-            const rawMessageBankData = readFileSync(DATABASE.POSTS, 'utf-8');
-            const messageBankData = JSON.parse(rawMessageBankData);
-            const messageObject = messageBankData.find((dataObject) => Object.keys(findObject).every(key => dataObject[key] === findObject[key]));
-            return messageObject;
-        };
         this.sendToChannel = (text, chatId, messageOption = undefined, successMessage, type = "text") => {
             if (type === "text") {
                 if (messageOption === undefined) {
                     bot.deleteMessage(chatId, this.CONVERSATIONS[chatId].lastBotMessageId)
                         .then(() => {
-                        bot.sendMessage(T_W_M, text)
+                        bot.sendMessage(channelId, text)
                             .then(() => {
                             bot.sendMessage(chatId, successMessage);
                         });
@@ -716,7 +833,7 @@ class ClimaxManager {
                 else {
                     bot.deleteMessage(chatId, this.CONVERSATIONS[chatId].lastBotMessageId)
                         .then(() => {
-                        bot.sendMessage(T_W_M, text, messageOption)
+                        bot.sendMessage(channelId, text, messageOption)
                             .then(() => {
                             bot.sendMessage(chatId, successMessage);
                         });
@@ -788,25 +905,25 @@ class ClimaxManager {
                 });
             }
         };
-        this.sendMessageOnMBMOType = (MBMO, chatId) => {
+        this.sendMessageByType = (msgObject, chatId) => {
             try {
                 let messageOptions = {
                     parse_mode: "HTML",
                     disable_web_page_preview: true
                 };
-                if ("replyMarkup" in MBMO) {
-                    messageOptions = Object.assign(Object.assign({}, messageOptions), { reply_markup: MBMO.replyMarkup });
+                if ("replyMarkup" in msgObject) {
+                    messageOptions = Object.assign(Object.assign({}, messageOptions), { reply_markup: msgObject.replyMarkup });
                 }
-                if ("video" in MBMO && MBMO.video !== undefined) {
-                    const videoFilePath = join(__dirname, "./media/videos", MBMO.video.path);
+                if ("video" in msgObject && msgObject.video !== undefined && msgObject.video !== false && msgObject.video !== true) {
+                    const videoFilePath = join(__dirname, "./media/videos", messageVideoDetails.path);
                     const videoStream = createReadStream(videoFilePath);
-                    if ("text" in MBMO) {
-                        messageOptions = Object.assign(Object.assign({}, messageOptions), { caption: MBMO.text });
+                    if ("text" in msgObject) {
+                        messageOptions = Object.assign(Object.assign({}, messageOptions), { caption: msgObject.text });
                     }
-                    if ("entities" in MBMO) {
-                        messageOptions = Object.assign(Object.assign({}, messageOptions), { caption_entities: MBMO.entities });
+                    if ("entities" in msgObject) {
+                        messageOptions = Object.assign(Object.assign({}, messageOptions), { caption_entities: msgObject.entities });
                     }
-                    messageOptions = Object.assign(Object.assign({}, messageOptions), { width: MBMO.video.width, height: MBMO.video.height });
+                    messageOptions = Object.assign(Object.assign({}, messageOptions), { width: msgObject.video.width, height: msgObject.video.height });
                     bot.sendVideo(chatId, videoStream, messageOptions, {
                         contentType: "application/octet-stream"
                     }).then((sentMessage) => {
@@ -814,20 +931,20 @@ class ClimaxManager {
                             climaxPostOnCreation.setState("lastPreviewMessageId", sentMessage.message_id);
                         }
                     }).catch((error) => {
-                        console.log("Error sending message on MBMO type: ", error);
+                        console.log("Error sending message on msgObject type: ", error);
                         return false;
                     });
                     return true;
                 }
-                if ("image" in MBMO && MBMO.image !== undefined) {
+                if ("image" in msgObject && msgObject.image !== undefined && msgObject.image !== false && msgObject.image !== true) {
                     // send photo message
-                    const imageFilePath = join(__dirname, "./media/imgs", MBMO.image);
+                    const imageFilePath = join(__dirname, "./media/imgs", msgObject.image);
                     const imageStream = createReadStream(imageFilePath);
-                    if ("text" in MBMO) {
-                        messageOptions = Object.assign(Object.assign({}, messageOptions), { caption: MBMO.text });
+                    if ("text" in msgObject) {
+                        messageOptions = Object.assign(Object.assign({}, messageOptions), { caption: msgObject.text });
                     }
-                    if ("entities" in MBMO) {
-                        messageOptions = Object.assign(Object.assign({}, messageOptions), { caption_entities: MBMO.entities });
+                    if ("entities" in msgObject) {
+                        messageOptions = Object.assign(Object.assign({}, messageOptions), { caption_entities: msgObject.entities });
                     }
                     bot.sendPhoto(chatId, imageStream, messageOptions, {
                         contentType: "application/octet-stream"
@@ -840,17 +957,17 @@ class ClimaxManager {
                     });
                     return true;
                 }
-                if (MBMO.text !== undefined) {
-                    if ("entities" in MBMO) {
-                        messageOptions = Object.assign(Object.assign({}, messageOptions), { entities: MBMO.entities });
+                if (msgObject.text !== undefined) {
+                    if ("entities" in msgObject) {
+                        messageOptions = Object.assign(Object.assign({}, messageOptions), { entities: msgObject.entities });
                     }
-                    bot.sendMessage(chatId, MBMO.text, messageOptions)
+                    bot.sendMessage(chatId, msgObject.text, messageOptions)
                         .then((sentMessage) => {
                         if (chatId === TWM_ADMIN || chatId === INCENIX) {
                             climaxPostOnCreation.setState("lastPreviewMessageId", sentMessage.message_id);
                         }
                     }).catch((error) => {
-                        console.log("Error sending message on MBMO type: ", error);
+                        console.log("Error sending message on msgObject type: ", error);
                         return false;
                     });
                     return true;
@@ -861,65 +978,6 @@ class ClimaxManager {
                 return false;
             }
             return true;
-        };
-        this.sendDayEndMessage = (dayHistory, chatId) => {
-            const sessionOfDay = Object.keys(dayHistory);
-            const getDayFormatted = () => {
-                const today = new Date();
-                const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                const dayOfMonth = today.getDate();
-                const ordinalSuffix = (n) => ['th', 'st', 'nd', 'rd'][((n % 100) - 20) % 10] || 'th';
-                return `${daysOfWeek[today.getDay()]}, ${months[today.getMonth()]} ${dayOfMonth}${ordinalSuffix(dayOfMonth)}, ${today.getFullYear()}`;
-            };
-            let tWins = 0;
-            let tLosses = 0;
-            const countWinsAndLosses = (history) => {
-                const { wins, losses } = history.reduce((acc, signal) => {
-                    if (signal.result && signal.result.includes("WIN")) {
-                        acc.wins += 1;
-                    }
-                    else {
-                        acc.losses += 1;
-                    }
-                    return acc;
-                }, { wins: 0, losses: 0 });
-                tWins += wins;
-                tLosses += losses;
-            };
-            const accuracyPercentage = (wins, losses) => {
-                const totalSignals = wins + losses;
-                const per = wins / totalSignals;
-                return `${(per * 100).toFixed(2)}%`;
-            };
-            let mts = `<strong>🧾 DIALY REPORT</strong>\n`;
-            mts += `<strong>🗓 ${getDayFormatted()}</strong>\n\n`;
-            mts += `<pre>\n`;
-            for (const sessionName of sessionOfDay) {
-                const sessionHistory = dayHistory[sessionName];
-                countWinsAndLosses(sessionHistory);
-                mts += `\n<code>${sessionName.toLocaleUpperCase()} SESSION</code>\n`;
-                mts += `<code>➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖</code>\n`;
-                sessionHistory.map((history) => {
-                    mts += `<code><strong>${history.initialTime} • ${history.pair} • ${(history.result !== null) ? history.result.split("-")[0] : history.direction}</strong></code>\n`;
-                });
-            }
-            mts += `\n</pre>\n\n`;
-            mts += `<strong>${sessionManager.returnEmoji(tWins.toString())} ${(tWins > 1) ? "WINS" : "WIN"} - ${sessionManager.returnEmoji(tLosses.toString())} ${(tLosses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
-            mts += `<strong>❇️ Accuracy: ${accuracyPercentage(tWins, tLosses)}</strong>\n\n`;
-            mts += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
-            bot.sendMessage(T_W_M, mts, {
-                parse_mode: "HTML",
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: "SHARE TESTIMONY", url: "https://t.me/twmsupports" }],
-                        [{ text: "LEARN HOW TO TRADE", url: "https://telegra.ph/STRICT-INSTRUCTIONS-ON-HOW-TO-TRADE-SUCCESSFULLY-02-09" }],
-                    ]
-                }
-            }).then(() => {
-                bot.sendMessage(chatId, "Day End Message Sent Successsfully!");
-            });
-            console.log('----- DAILY REPORT SENT SUCCESSFULLY -----');
         };
         // this.lastAdmin = 0;
         this.lastAdmin = INCENIX;
@@ -936,134 +994,7 @@ class ClimaxManager {
         };
     }
 }
-const botManager = new ClimaxManager();
-const handleSessionEnd = (sessionName, chatId, called = false) => {
-    const signalHistory = sessionManager.getHistory();
-    if (called && signalHistory.length === 0) {
-        bot.sendMessage(chatId, "No signal has been sent this session, so there's nothing to end");
-        return;
-    }
-    if (signalHistory.length !== 0) {
-        try {
-            const options = {
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: 'Yes', callback_data: 'yes' },
-                            { text: 'No', callback_data: 'no' }
-                        ]
-                    ]
-                }
-            };
-            bot.sendMessage(chatId, `Do you want to post the session end message for ${sessionName} session?`, options)
-                .then(sentMessage => {
-                const messageId = sentMessage.message_id;
-                const sessionCanEnd = sessionManager.checkSessionValidity();
-                const timeoutId = setTimeout(() => {
-                    if (!sessionCanEnd) {
-                        bot.sendMessage(chatId, "Session has a signal without a result, can't end session yet...");
-                        return;
-                    }
-                    if (sessionCanEnd) {
-                        sessionManager.sendSessionEndMessage();
-                        const prSh = sessionManager.getPostTime();
-                        // signalManager.saveHistoryForDay(prSh, signalHistory);
-                        botManager.setLastBotMessageId(chatId, 0);
-                        // signalManager.clearHistory();
-                        bot.editMessageText("Session end message successfully posted...automatically", {
-                            chat_id: chatId,
-                            message_id: messageId
-                        });
-                        console.log("---------------------------------");
-                        console.log("------- SESSION ENDED -----------");
-                    }
-                }, 5 * 60 * 1000);
-                bot.on('callback_query', callbackQuery => {
-                    var _a;
-                    if (((_a = callbackQuery.message) === null || _a === void 0 ? void 0 : _a.message_id) === messageId) {
-                        clearTimeout(timeoutId);
-                        const response = callbackQuery.data;
-                        if (response === 'yes' && sessionCanEnd) {
-                            if (!sessionCanEnd) {
-                                bot.sendMessage(chatId, "Session has a signal without a result, can't end session yet...");
-                                return;
-                            }
-                            sessionManager.sendSessionEndMessage();
-                            const prSh = sessionManager.getPostTime();
-                            // signalManager.saveHistoryForDay(prSh, signalHistory);
-                            // signalManager.clearHistory();
-                            botManager.setLastBotMessageId(chatId, 0);
-                            bot.editMessageText("Session end message successfully posted...", {
-                                chat_id: chatId,
-                                message_id: messageId
-                            });
-                            console.log("---------------------------------");
-                            console.log("------- SESSION ENDED -----------");
-                        }
-                        if (response === 'no' && sessionCanEnd) {
-                            bot.editMessageText("Okay, but you will need to end the session manually...YOURSELF", {
-                                chat_id: chatId,
-                                message_id: messageId
-                            });
-                        }
-                    }
-                });
-            });
-        }
-        catch (err) {
-            bot.sendMessage(chatId, "Unable to send session end message for some reason. Please try again..");
-        }
-    }
-};
-const handleDayEnd = () => {
-    // const historyOfDay = signalManager.getDayHistory();
-    const lastAdmin = botManager.getLastAdmin();
-    if (lastAdmin !== null) {
-        console.log("HAnding Day End!");
-        // botManager.sendDayEndMessage(historyOfDay, lastAdmin);
-        // signalManager.clearDayHistory();
-    }
-    else {
-        console.log("No admin found to send day end message");
-    }
-};
-const scheduleClimaxCrons = () => {
-    console.log("Will schedule all T_W_M crons...");
-    const rawCronFileData = readFileSync(DATABASE.CRONS, 'utf-8');
-    const cronFileData = JSON.parse(rawCronFileData);
-    cronFileData.forEach((cronJob) => {
-        // console.log(`Running ${cronJob.name} job at..`);
-        cronJob.schedule.forEach((cronExpression) => {
-            if (cronJob.id === "session_end") {
-                cron.schedule(cronExpression, () => {
-                    const lastController = botManager.getLastAdmin();
-                    handleSessionEnd(cronJob.name, lastController);
-                }, { timezone: cronJob.timezone });
-            }
-            else if (cronJob.id === "day_end") {
-                cron.schedule(cronExpression, () => {
-                    handleDayEnd();
-                }, { timezone: cronJob.timezone });
-            }
-            else {
-                const MBMO = botManager.getMessageFromBank({ id: cronJob.id });
-                if (MBMO !== undefined) {
-                    cron.schedule(cronExpression, () => {
-                        if (cronJob.id === "overnight_start" || cronJob.id === "morning_start" || cronJob.id === "afternoon_start") {
-                            const prSesh = sessionManager.getPostTime();
-                            botManager.setPresentSession(prSesh || cronJob.id.split("_")[0].toLocaleUpperCase());
-                            console.log(`......New session commences: ${prSesh || cronJob.id.split("_")[0].toLocaleUpperCase()} SESSION`);
-                        }
-                        // TODO: Implement job logic
-                        botManager.sendMessageOnMBMOType(MBMO, T_W_M);
-                    }, { timezone: cronJob.timezone });
-                }
-            }
-        });
-    });
-};
-scheduleClimaxCrons();
-// start the bot
+const botManager = new BotManager();
 bot.onText(/\/start/, (msg) => {
     var _a, _b;
     const chatId = (_a = msg === null || msg === void 0 ? void 0 : msg.from) === null || _a === void 0 ? void 0 : _a.id;
@@ -1084,7 +1015,6 @@ bot.onText(/\/start/, (msg) => {
         bot.sendMessage(chatId, "You are not authorized to use this bot");
     }
 });
-// creating and sending signals
 bot.onText(/\/signal/, (msg) => {
     var _a;
     const chatId = (_a = msg === null || msg === void 0 ? void 0 : msg.from) === null || _a === void 0 ? void 0 : _a.id;
@@ -1110,7 +1040,6 @@ const pairRegex = /[A-Z]{3}\/[A-Z]{3} \(OTC\)/;
 const hourRegex = /.*hour_.*/;
 const minuteRegex = /.*minute_.*/;
 const winRegex = /.*martingale.*/;
-// sedning results to channel
 bot.onText(/\/result/, (msg) => {
     var _a;
     const chatId = (_a = msg === null || msg === void 0 ? void 0 : msg.from) === null || _a === void 0 ? void 0 : _a.id;
@@ -1255,9 +1184,8 @@ bot.on("callback_query", (callbackQuery) => __awaiter(void 0, void 0, void 0, fu
             botManager.deleteAndSendNewMessage(text, messageId, chatId, keyboard);
         }
         if (signalManager.checkSignalObject(action) &&
-            T_W_M !== undefined) {
-            const message = signalManager.createNewSignal();
-            // lastAdmin = chatId;
+            channelId !== undefined) {
+            const message = yield signalManager.createNewSignal();
             botManager.sendToChannel(message, chatId, {
                 parse_mode: "HTML",
                 disable_web_page_preview: true
@@ -1273,23 +1201,23 @@ bot.on("callback_query", (callbackQuery) => __awaiter(void 0, void 0, void 0, fu
         }
         if (winRegex.test(action) || action === "lossBoth") {
             if (action === "martingale0") {
-                sessionManager.saveResult(resultManager.callDirect());
+                db.updateSignal(resultManager.callDirect());
                 climaxPostOnCreation.setState("presentSignalResult", resultManager.callDirect());
             }
             if (action === "martingale1") {
-                sessionManager.saveResult(resultManager.callMartingale1());
+                db.updateSignal(resultManager.callMartingale1());
                 climaxPostOnCreation.setState("presentSignalResult", resultManager.callMartingale1());
             }
             if (action === "martingale2") {
-                sessionManager.saveResult(resultManager.callMartingale2());
+                db.updateSignal(resultManager.callMartingale2());
                 climaxPostOnCreation.setState("presentSignalResult", resultManager.callMartingale2());
             }
             if (action === "martingale3") {
-                sessionManager.saveResult(resultManager.callMartingale3());
+                db.updateSignal(resultManager.callMartingale3());
                 climaxPostOnCreation.setState("presentSignalResult", resultManager.callMartingale3());
             }
             if (action === "lossBoth") {
-                sessionManager.saveResult("❌ LOSS");
+                db.updateSignal("❌ LOSS");
                 climaxPostOnCreation.setState("presentSignalResult", resultManager.callLossType1());
             }
             climaxPostOnCreation.setState("chosenSignalResult", true);
@@ -1305,12 +1233,14 @@ bot.on("callback_query", (callbackQuery) => __awaiter(void 0, void 0, void 0, fu
         if (action === "send_result") {
             const ARI = climaxPostOnCreation.awaitingResultImage();
             if (ARI) {
+                console.log("About to send result with image...");
                 const resultType = climaxPostOnCreation.presentSignalResult();
                 const resultTypeDefined = resultType === resultManager.callLossType1() ? resultManager.callLossType2() : climaxPostOnCreation.presentSignalResult();
                 const resultImage = climaxPostOnCreation.resultImagePath();
+                const resultImageStream = createReadStream(resultImage);
                 bot.deleteMessage(chatId, botManager.lastBotMessageId(chatId)).then(() => {
                     if (resultImage !== undefined) {
-                        bot.sendPhoto(T_W_M, resultImage, {
+                        bot.sendPhoto(channelId, resultImageStream, {
                             caption: resultTypeDefined
                         }).then(() => bot.sendMessage(chatId, "Result posted successfully..."));
                     }
@@ -1345,7 +1275,7 @@ bot.on("photo", (message) => __awaiter(void 0, void 0, void 0, function* () {
         const ARI = climaxPostOnCreation.awaitingResultImage();
         if (ARI) {
             const resultImageWIthWatermark = yield resultManager.callLossType2Image(fileId);
-            if (resultImageWIthWatermark !== undefined) {
+            if (resultImageWIthWatermark !== null) {
                 const keyboard = [
                     [{ text: "⏫ Send to Channel", callback_data: "send_result" }],
                     [{ text: "Cancel Operation", callback_data: "cancel_op" }]
@@ -1362,22 +1292,20 @@ bot.on("photo", (message) => __awaiter(void 0, void 0, void 0, function* () {
         bot.sendMessage(chatId, "You are not authorized to use this bot");
     }
 }));
-bot.onText(/\/endsession/, (msg) => {
+bot.onText(/\/endsession/, (msg) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
-    const presentSession = botManager.getPresentSession();
     const chatId = (_a = msg.from) === null || _a === void 0 ? void 0 : _a.id;
-    const prSesh = sessionManager.getPostTime();
-    handleSessionEnd(prSesh || presentSession, chatId, true);
-});
-bot.onText(/\/endday/, (msg) => {
+    yield sessionManager.endSession(chatId, true);
+}));
+bot.onText(/\/endday/, (msg) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
-    const presentSession = botManager.getPresentSession();
     const chatId = (_a = msg.from) === null || _a === void 0 ? void 0 : _a.id;
-    handleDayEnd();
-});
+    sessionManager.endDay(chatId);
+}));
+sessionManager.scheduleClimaxCrons();
 app.get("/", (req, res) => {
-    res.send("Halskey_TWM v2.0.3 is running...");
+    res.send("Halskey v2.1.0 for TWM is running...");
 });
 app.listen(port, () => {
-    console.log("Halskey_TWM v2.0.3 is running...");
+    console.log("Halskey v2.1.0 for TWM is running...");
 });

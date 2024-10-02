@@ -1,45 +1,28 @@
-import TelegramBot, {
-  Chat,
-  ChatId,
-  InlineKeyboardButton,
-  InlineKeyboardMarkup,
-  Message,
-  MessageEntity,
-} from "node-telegram-bot-api";
+import TelegramBot, { ChatId } from "node-telegram-bot-api";
 
 import {
-  MessageBankMessage,
   Signal,
-  History,
   SignalHistory,
   dayHistory,
   CurrencyPairs,
-  SessionDetails,
-  SessionEnd,
-  PostCreationStates,
-  ButtonPost,
-  MessageBank,
-  ClimaxPostPreview,
   WTS,
-  Result,
-  ClimaxCronJobObject,
   ClimaxPostState,
-  ISO8601Date,
+  DBSignal,
+  DBCron,
+  DBCronPost
 } from "./types.js";
 
-import {
-  v4 as uuidv4,
-  version as uuidVersion,
-  validate as uuidValidate,
-} from "uuid";
+import { v4 as uuidv4 } from "uuid";
+
+import Database from "./database.js";
 
 import express, { Express } from "express";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { writeFileSync, createReadStream } from "fs";
 
 import cron from "node-cron";
 import axios from "axios";
-import { readFileSync, writeFileSync, createReadStream, watchFile } from "fs";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -64,8 +47,6 @@ const bot: TelegramBot = new TelegramBot(token, {
 
 const TWM_ADMIN: number | undefined = Number(process.env.OWNER);
 const INCENIX: number | undefined = Number(process.env.INCENIX);
-const T_W_M: number | undefined = Number(process.env.CHANNEL);
-const atomix: number | undefined = Number(process.env.ATOMIX);
 
 const authorize = (chatId: ChatId): boolean => {
   if (chatId === INCENIX || chatId === TWM_ADMIN) {
@@ -75,11 +56,16 @@ const authorize = (chatId: ChatId): boolean => {
   }
 }
 
-const DATABASE = {
-  POSTS: join(__dirname, "./database/posts.json"),
-  HISTORY: join(__dirname, "./database/history.json"),
-  CRONS: join(__dirname, "./database/crons.json"),
-};
+const messageVideoDetails = {
+  width: 622,
+  height: 1280,
+  path: "/brand/TWM_Video_Instructions.mp4"
+}
+
+const db = new Database("tradewithmatthew");
+
+const channelId: ChatId = db.getChannelId();
+// const channelId: ChatId = Number(process.env.ATOMIX); //test
 
 class Session {
   history: SignalHistory;
@@ -90,7 +76,7 @@ class Session {
     this.dayHistory = {};
   }
 
-  getPostTime = (): string => {
+  getPresentSession = (): string => {
     const now = new Date();
     const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
     const londonOffset = 1;
@@ -140,95 +126,51 @@ class Session {
     return modString;
   }
 
-  downloadAndSavePhoto = async ( fileId: string ): Promise<{ fileRelativePath: string | undefined; fileUrl: string}> => {
-    let fileRelativePath: string | undefined = undefined;
+  downloadAndSavePhoto = async ( fileId: string ): Promise<string> => {
     let fileUrl = "";
   
     if (fileId !== undefined) {
       try {
           const filetoGet = await bot.getFile(fileId);
-          const fileName = filetoGet.file_path?.replace("photos/", "").trim();
-  
           fileUrl = `https://api.telegram.org/file/bot${token}/${filetoGet.file_path}`;
-          const downloadPath = join(__dirname, "./media/imgs");
-  
-          fileRelativePath =
-            fileName !== undefined
-              ? join(__dirname, "./media/imgs/", fileName)
-              : undefined;
-  
-          await bot.downloadFile(fileId, downloadPath);
-          console.log("Photo downloaded successfully...");
+          console.log("Photo url tracked...");
       } catch (err) {
         console.log("Error downloading photo");
-        fileRelativePath = undefined;
+        console.error(err);
       }
     } else {
       console.log("No photo found ...or photo has no file_id");
     }
   
-    return { fileRelativePath, fileUrl }
+    return fileUrl;
   };
 
-  downloadMarkedPhoto = async (url: string): Promise<{ status: boolean; filename: string }> => {
-    const filename = `${uuidv4()}.png`;
-    const filePath = join(__dirname, '../media/imgs', filename);
+  downloadMarkedPhoto = async (url: string): Promise<{ status: boolean; filename: string | null, filePath: string | null }> => {
+    let filename = null;
+    let filePath = "";
   
     try {
         const response = await axios({
             url,
             method: 'GET',
             responseType: 'arraybuffer',
+            timeout: 30000
         });
+
+        filename = `${uuidv4()}.png`;
+        filePath = join(__dirname, '../media/imgs', filename);
   
         writeFileSync(filePath, response.data, 'binary');
-  
-        console.log(`Image downloaded and saved as ${filename}`);
-        return { status: true, filename };
+        return { status: true, filename, filePath };
     } catch (error) {
         console.error('Error downloading the image:', error);
-        return { status: false, filename };
+        return { status: false, filename: null, filePath: null };
     }
   }
 
-  saveSignal = (signalObject: History): { status: boolean } => {
-    try {
-      const historyDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
-      const historyDB = JSON.parse(historyDBRaw);
-      const presentSession: string = this.getPostTime();
-
-      historyDB[presentSession].push(signalObject);
-      writeFileSync(DATABASE.HISTORY, JSON.stringify(historyDB), { encoding: 'utf8' });
-
-      return { status: true };
-    } catch (err) {
-      console.error(err);
-      return { status: false };
-    }
-  }
-
-  saveResult = (result: string): { status: boolean } => {
-    try{
-      const resultDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
-      const resultDB = JSON.parse(resultDBRaw);
-      const presentSession: string = this.getPostTime();
-
-      resultDB[presentSession].at(-1).result = result;
-      writeFileSync(DATABASE.HISTORY, JSON.stringify(resultDB), { encoding: 'utf8' });
-
-      return { status: true };
-    } catch (err) {
-      console.error(err);
-      return { status: false };
-    }
-  }
-
-  getHistory = (): SignalHistory => {
-    const presentSession: string = this.getPostTime();
-    const historyDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
-    const historyDB = JSON.parse(historyDBRaw);
-
-    return historyDB[presentSession];
+  checkSessionValidity = async (): Promise<boolean> => {
+    const nullResultSignals = await db.validate();
+    return (nullResultSignals.length === 0) ? true : false;
   }
 
   getSessionAccuracy = (wins: number, losses: number): { status: boolean; percentage: string; } => {
@@ -241,30 +183,12 @@ class Session {
     };
   }
 
-  checkSessionValidity = (): null | boolean => {
-    const presentSession: string = this.getPostTime();
-    const historyDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
-    const historyDB = JSON.parse(historyDBRaw);
-
-    if (historyDB[presentSession].at(-1).result === null) {
-      return false;
-    } else if (historyDB[presentSession].length === 0) {
-      return null;
-    } else {
-      return true;
-    }
-  }
-
-  sendSessionEndMessage = () => {
+  sendSessionEndMessage = async (presentSession: string, historyDB: DBSignal[]) => {
     try {
-      const historyDBRaw = readFileSync(DATABASE.HISTORY, { encoding: 'utf8' });
-      const historyDB = JSON.parse(historyDBRaw);
-      const presentSession: string = this.getPostTime();
-
-      const sessionEndPhotoPath = join(__dirname, "./media/imgs/brand/session_end.jpg");
+      const sessionEndPhotoPath = join(__dirname, "../media/imgs/brand/session_end.jpg");
       const sessionEndPhotoStream = createReadStream(sessionEndPhotoPath);
 
-      const countWinsAndLosses = (history: History[]): { wins: number; losses: number } => {
+      const countWinsAndLosses = (history: DBSignal[]): { wins: number; losses: number } => {
         return history.reduce(
           (acc, entry) => ({
             wins: acc.wins + ((entry.result as string).includes("WIN") ? 1 : 0),
@@ -274,7 +198,7 @@ class Session {
         );
       }
 
-      const sessionResult = countWinsAndLosses(historyDB[presentSession]);
+      const sessionResult = countWinsAndLosses(historyDB);
 
       let sessionIcon = "";
 
@@ -302,15 +226,15 @@ class Session {
       let SESSION_END_MSG = `<strong>📝 REPORT</strong>\n`
           SESSION_END_MSG += `<strong>${sessionIcon} ${presentSession} SESSION</strong>\n\n`
           SESSION_END_MSG += `<blockquote>`;
-          historyDB[presentSession].map((history: History) => {
-            SESSION_END_MSG += `<code><strong>${history.initialTime} • ${history.pair} • ${(history.result !== null) ? history.result.split("-")[0] : history.direction}</strong></code>\n`
+          historyDB.map((history: DBSignal) => {
+            SESSION_END_MSG += `<code><strong>${history.initial_time} • ${history.pair} • ${(history.result !== null) ? history.result.split("-")[0] : history.direction}</strong></code>\n`
           })
-          SESSION_END_MSG += `\n</blockquote>\n`;
+          SESSION_END_MSG += `</blockquote>\n`;
           SESSION_END_MSG += `<strong>${(sessionManager.returnEmoji(sessionResult.wins.toString()))} ${(sessionResult.wins > 1) ? "WINS" : "WIN"} - ${(sessionManager.returnEmoji(sessionResult.losses.toString()))} ${(sessionResult.losses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
-          SESSION_END_MSG += `<strong>❇️ Accuracy: ${accuracyPercentage(sessionResult.wins, sessionResult.losses)}%</strong>\n\n`;
+          SESSION_END_MSG += `<strong>❇️ Accuracy: ${accuracyPercentage(sessionResult.wins, sessionResult.losses)}</strong>\n\n`;
           SESSION_END_MSG += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
       
-      bot.sendPhoto(T_W_M as ChatId, sessionEndPhotoStream, {
+      bot.sendPhoto(channelId as ChatId, sessionEndPhotoStream, {
         parse_mode: "HTML",
         caption: SESSION_END_MSG,
         reply_markup: {
@@ -327,20 +251,243 @@ class Session {
       console.error(error);
     }
   }
+
+  endSession = async (chatId: ChatId, called: boolean = false) => {
+    const presentSession: string = this.getPresentSession();
+    const signalHistory = await db.getSessionSignals(presentSession);
+  
+    if (called && signalHistory.length === 0) {
+      bot.sendMessage(chatId as ChatId, "No signal has been sent this session, so there's nothing to end");
+      return;
+    }
+  
+    if (signalHistory.length !== 0) {
+      try {
+        const options = {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: 'Yes', callback_data: 'yes' },
+                { text: 'No', callback_data: 'no' }
+              ]
+            ]
+          }
+        };
+    
+        bot.sendMessage(chatId, `Do you want to post the session end message for ${presentSession} session?`, options)
+        .then(async (sentMessage) => {
+          const messageId = sentMessage.message_id;
+          const sessionCanEnd = await this.checkSessionValidity();
+    
+          const timeoutId = setTimeout(() => {
+            if (!sessionCanEnd) {
+              bot.sendMessage(chatId as ChatId, "Session has a signal without a result, can't end session yet...")
+              return;
+            }
+  
+            if (sessionCanEnd) {
+              this.sendSessionEndMessage(presentSession, signalHistory);
+              botManager.setLastBotMessageId(chatId as ChatId, 0);
+              bot.editMessageText("Session end message successfully posted...automatically", {
+                chat_id: chatId,
+                message_id: messageId
+              })
+              console.log("---------------------------------");
+              console.log("------- SESSION ENDED -----------");
+            }
+            
+          }, 5 * 60 * 1000);
+    
+          bot.on('callback_query', callbackQuery => {
+            if (callbackQuery.message?.message_id === messageId) {
+              clearTimeout(timeoutId);
+              const response = callbackQuery.data;
+              if (response === 'yes' && sessionCanEnd) {
+                if (!sessionCanEnd) {
+                  bot.sendMessage(chatId as ChatId, "Session has a signal without a result, can't end session yet...");
+                  return;
+                }
+  
+                sessionManager.sendSessionEndMessage(presentSession, signalHistory);
+                botManager.setLastBotMessageId(chatId as ChatId, 0);
+                bot.editMessageText("Session end message successfully posted...", {
+                  chat_id: chatId,
+                  message_id: messageId
+                });
+                console.log("---------------------------------");
+                console.log("------- SESSION ENDED -----------");
+              }
+  
+              if (response === 'no' && sessionCanEnd) {
+                bot.editMessageText("Okay, but you will need to end the session manually...YOURSELF", {
+                  chat_id: chatId,
+                  message_id: messageId
+                });
+              }
+            }
+          });
+        });
+        
+      } catch (err) {
+        bot.sendMessage(chatId as ChatId, "Unable to send session end message for some reason. Please try again..");
+      }
+    }
+  }
+
+  endDay = (chatId: ChatId) => {
+    bot.sendMessage(chatId as ChatId, "Please wait... curating signals")
+    .then(async (sentMessage) => {
+      const dayHistory = await db.getDaySignals();
+
+      const sessions = {
+        OVERNIGHT: 'OVERNIGHT SESSION',
+        MORNING: 'MORNING SESSION',
+        AFTERNOON: 'AFTERNOON SESSION',
+        OUTSIDE: 'OUTSIDE SESSION'
+      };
+
+      const getDayFormatted = () => {
+        const today = new Date();
+        const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const dayOfMonth = today.getDate();
+        
+        const ordinalSuffix = (n: number) => ['th', 'st', 'nd', 'rd'][((n % 100) - 20) % 10] || 'th';
+        
+        return `${daysOfWeek[today.getDay()]}, ${months[today.getMonth()]} ${dayOfMonth}${ordinalSuffix(dayOfMonth)}, ${today.getFullYear()}`;
+      }
+
+      let tWins = 0;
+      let tLosses = 0;
+
+      const countWinsAndLosses = (history: DBSignal[]): void => {
+        const { wins, losses } = history.reduce(
+          (acc, signal) => {
+            if (signal.result && signal.result.includes("WIN")) {
+              acc.wins += 1;
+            } else {
+              acc.losses += 1;
+            }
+            return acc;
+          },
+          { wins: 0, losses: 0 }
+        );
+      
+        tWins += wins;
+        tLosses += losses;
+      };
+
+      const accuracyPercentage = (wins: number, losses: number): string => {
+        const totalSignals = wins+losses;
+        const per = wins/totalSignals;
+        return `${(per * 100).toFixed(2)}%`;
+      }
+
+      countWinsAndLosses(dayHistory);
+
+      let mts = `<strong>🧾 DAILY REPORT</strong>\n`
+      mts += `<strong>🗓 ${getDayFormatted()}</strong>\n\n`
+      mts += `<pre>\n`
+
+      Object.keys(sessions).forEach(session => {
+        mts += `<strong>${sessions[session as 'OVERNIGHT' | 'MORNING' | 'AFTERNOON' | 'OUTSIDE']}</strong>\n<strong><code>➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖</code></strong>\n`;
+        dayHistory.filter(item => item.session === session)
+          .forEach(item => {
+            mts += `<strong><code>${item.initial_time} • ${item.pair} • ${(item.result !== null) ? item.result.split("-")[0] : item.direction}</code></strong>\n`;
+          });
+        mts += '\n';
+      });
+      
+      mts += `</pre>\n`;
+      mts += `<strong>${sessionManager.returnEmoji(tWins.toString())} ${(tWins > 1) ? "WINS" : "WIN"} - ${sessionManager.returnEmoji(tLosses.toString())} ${(tLosses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
+      mts += `<strong>❇️ Accuracy: ${accuracyPercentage(tWins, tLosses)}</strong>\n\n`;
+      mts += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
+
+      bot.deleteMessage(chatId as ChatId, sentMessage.message_id)
+      .then(() => {
+        console.log("Sending message...");
+        bot.sendMessage(channelId as ChatId, mts, {
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "SHARE TESTIMONY", url: "https://t.me/twmsupports" }],
+              [{ text: "LEARN HOW TO TRADE", url: "https://telegra.ph/STRICT-INSTRUCTIONS-ON-HOW-TO-TRADE-SUCCESSFULLY-02-09" }],
+            ]
+          }
+        }).then(() => {
+          bot.sendMessage(chatId, "Day End Message Sent Successsfully!");
+          console.log('|| ===== DAILY REPORT SENT SUCCESSFULLY ===== ||');
+        });
+      })
+    });
+  }
+
+  scheduleClimaxCrons = async () => {
+    console.log("Will schedule all Channel crons...");
+    const cronFileData = await db.getChannelCrons();
+    const cronPosts: DBCronPost[] = await db.getChannelCronPosts();
+  
+    cronFileData.forEach((cronJob: DBCron) => {
+      // console.log(`Running ${cronJob.name} job at..`);
+  
+      cronJob.schedule.forEach(async (cronExpression) => {
+        if (cronJob.cron_id === "session_end") {
+  
+          cron.schedule(cronExpression, () => {
+            const lastController = botManager.getLastAdmin();
+            sessionManager.endSession(lastController as ChatId);
+          }, { timezone: cronJob.timezone });
+  
+        } else if (cronJob.cron_id === "day_end") {
+          
+          cron.schedule(cronExpression, () => {
+            const lastController = botManager.getLastAdmin();
+            sessionManager.endDay(lastController as ChatId)
+          }, { timezone: cronJob.timezone });
+  
+        } else {
+          if (cronPosts.length !== 0) {
+            cron.schedule(cronExpression, () => {
+              
+              let modifiedDBPost: WTS = {
+                name: "",
+                id: ""
+              };
+
+              const cronToPost = cronPosts.find(pst => pst.message_id === cronJob.cron_id);
+
+              if (cronToPost?.video) {
+                modifiedDBPost = {
+                  ...cronToPost,
+                  id: cronToPost.message_id,
+                  video: messageVideoDetails
+                }
+              }
+
+              if (cronToPost?.image) {
+                modifiedDBPost = {
+                  ...cronToPost,
+                  id: cronToPost.message_id,
+                  image: join(__dirname, './media/imgs/brand/', cronToPost.message_id)
+                }
+              }
+
+              if (cronJob.cron_id === "overnight_start" || cronJob.cron_id === "morning_start" || cronJob.cron_id === "afternoon_start") {
+                const prSesh = sessionManager.getPresentSession();
+                console.log(`...New session commences: ${prSesh || cronJob.cron_id.split("_")[0].toLocaleUpperCase()} SESSION`);
+              }
+
+              (Object.keys(modifiedDBPost).length === 0) && botManager.sendMessageByType(modifiedDBPost, channelId);
+            
+            }, { timezone: cronJob.timezone });
+          }
+        }
+      });
+    });
+  };
 }
 
 const sessionManager = new Session();
-sessionManager.saveSignal({
-  dateStamp: "new Date()",
-  pair: "AUD / CAD",
-  direction: "HIGHER",
-  result: null,
-  initialTime: "13:34"
-})
-
-setTimeout(() => {
-  sessionManager.saveResult("WIN");
-}, 2000)
 
 class SignalManager {
   currencyPairs: CurrencyPairs;
@@ -493,7 +640,7 @@ class SignalManager {
     };
   }
 
-  createNewSignal = (): string => {
+  createNewSignal = async (): Promise<string> => {
     const padZero = (num: number): string => num.toString().padStart(2, "0");
     const getNextTime = (h: number, m: number, increment: number): string => {
       m += increment;
@@ -523,16 +670,14 @@ class SignalManager {
       SIGNAL_MSG += `<strong>3️⃣ LEVEL AT ${martingaleLevels[2]}</strong>\n\n`;
       SIGNAL_MSG += `<strong><a href="https://shorturl.at/cehnV">💹 TRADE THIS SIGNAL HERE</a></strong>\n\n`;
 
-      
-    const timeAndDateSTamp = new Date().toISOString();
+    const presentSession = sessionManager.getPresentSession();
 
-    sessionManager.saveSignal({
-      dateStamp: timeAndDateSTamp as ISO8601Date,
+    await db.saveSignal({
       pair: this.signal.pair,
       direction: this.signal.direction,
       result: null,
       initialTime: entryTime
-    });
+    }, presentSession);
 
     return SIGNAL_MSG;
   };
@@ -609,30 +754,30 @@ class ResultManager {
   callLossType1 = (): string => this.lossType1;
   callLossType2 = (): string => this.lossType2;
 
-  callLossType2Image = async (fileId: string) => {
+  callLossType2Image = async (fileId: string): Promise<string | null> => {
     try {
       const watermarkPath = `https://lh3.googleusercontent.com/pw/AP1GczPt3db3v4XAjMGyZIo94YUcG0Oqa4Shvq8SmBpheJ3Qz3Tk9BzQAhm-HC6kwQWQhy85PW9kPPGGkJAaYB7hn1kKP0SQ_sStZCNokOrMspgBWZetkBuwkNAFKHhMZD_GW43Edc771MVyDOYfAP9Com83QJFx6-xVRiHcNg-cQ7EkRXAZ2cKPaJzdeytdYB0GQO3UfHkEjbnK_CMOm_Cef0oqadY_8wgJYBKO5Ia_WCqcfT5oM2GlTrVyhx2ed6_FrBwi_BY9tihd8su0FnE7gNE6ceUr3vYd9w1jeZziPmHkPfa_xPbwr_WzqJmwNJDljyDRaBPlZYDiaUxuW0_KP5dETGtR_6LlqFF-3LB-axuq4GpbJaaUgDEn9MVaX207va7hN0xqHlBa7TYIaGEc0fANi38BR3DKdqLqFdWqPpUe6foiLNp8ON5Ib1yegjtfGW9s_-2kr_VtvPCLNHIMb_CHuHgfeOT8iBckYr_Hkg6aLu8R11eBgIyznxVLxidOR_ffs4bVB2u0XwOucs4eoFWIVvVcbkBQs-mE2RIggXyg8OBLFoNS-rGR3E8l8U5vLR3nlxrAU-ziH7GWO_wyWNB99UhoT7pfzxcpvfvyuCMrHrqnJ_mGsCaGFYxguUIDoTMyRWNQNPVXIi1Vg2HiP30ikiVWOLTiYxuJs3DRVGbxCJw87CwsDd685hTNAgdkSl3WrxM2me_NDW3Fke_aSZJNlRLCC728aljTp-iKSz_JuuP3-gKnzqluNVPLt7fmKhZXGC6ul7TiroUYLAuMr898F6kyz53BYlVp4va0WljphF7QNE_BSUJk8JyGMAfQnKNb3wlMiOm17lUYEh_V0-xe8xko5Y8ov3ozarTVgT4V5-BrDPQD1GxLwnvisc9LxnGAP5id5utAzsq9K3I3lv-yx8S6XXM1XQD-897VKwUPhVKJogmlIUmJwphN9oocdxAET8WWmUDitwtJoA=w691-h590-no?authuser=0`;
-      const mainPhotoPath = await sessionManager.downloadAndSavePhoto(fileId).catch((err) => {
+      const resultTgImageUrl = await sessionManager.downloadAndSavePhoto(fileId).catch((err) => {
         console.error(err);
         return null;
       });
 
-      if (mainPhotoPath !== null) {
-        const quickChartLink = `https://quickchart.io/watermark?mainImageUrl=${mainPhotoPath.fileUrl}&markImageUrl=${watermarkPath}&markRatio=0.6&position=center&opacity=0.65`;
+      if (resultTgImageUrl !== null) {
+        const quickChartLink = `https://quickchart.io/watermark?mainImageUrl=${resultTgImageUrl}&markImageUrl=${watermarkPath}&markRatio=0.6&position=center&opacity=0.65`;
       
         const watermarkImage = await sessionManager.downloadMarkedPhoto(quickChartLink).then(result => {
           console.log('Download Status:', result.status);
           console.log('Saved as:', result.filename);
-          return result.filename;
+          return result.filePath;
         });
-      
-        const filePath = join(__dirname, '../media/imgs', watermarkImage);
-        return filePath;
+
+        return watermarkImage;
       }
 
     } catch (error) {
       console.error("Error adding watermark:", error);
     }
+    return null;
   };
   
 }
@@ -838,7 +983,7 @@ class ClimaxPostCreation {
 
 const climaxPostOnCreation = new ClimaxPostCreation();
 
-class ClimaxManager {
+class BotManager {
   private lastAdmin: ChatId;
   private presentSession: string;
 
@@ -876,32 +1021,15 @@ class ClimaxManager {
     this.CONVERSATIONS[chatId].lastBotMessageId = messageId;
   }
 
-  setPresentSession = (sessionName: string): void => {
-    this.presentSession = sessionName;
-  }
-
   getLastAdmin = () => this.lastAdmin;
   getPresentSession = () => this.presentSession;
-
-  getMessageFromBank = (findObject: {[key: string]: string}): WTS => {
-    const rawMessageBankData = readFileSync(DATABASE.POSTS, 'utf-8');
-    const messageBankData = JSON.parse(rawMessageBankData);
-  
-    const messageObject = messageBankData.find((dataObject: WTS) => 
-      Object.keys(findObject).every(key => dataObject[key as keyof WTS] === findObject[key])
-    );
-    
-    return messageObject;
-  }
-
-  
 
   sendToChannel = (text: string, chatId: ChatId, messageOption: TelegramBot.SendMessageOptions | undefined = undefined, successMessage: string, type: string = "text") => {
     if (type === "text") {
       if (messageOption === undefined) {
         bot.deleteMessage(chatId, this.CONVERSATIONS[chatId].lastBotMessageId)
         .then(() => {
-        bot.sendMessage(T_W_M as ChatId, text)
+        bot.sendMessage(channelId as ChatId, text)
         .then(() => {
           bot.sendMessage(chatId, successMessage);
         })
@@ -909,7 +1037,7 @@ class ClimaxManager {
       } else {
         bot.deleteMessage(chatId, this.CONVERSATIONS[chatId].lastBotMessageId)
         .then(() => {
-          bot.sendMessage(T_W_M as ChatId, text, messageOption)
+          bot.sendMessage(channelId as ChatId, text, messageOption)
           .then(() => {
             bot.sendMessage(chatId, successMessage);
           })
@@ -991,43 +1119,43 @@ class ClimaxManager {
     }
   }
 
-  sendMessageOnMBMOType = (MBMO: WTS, chatId: ChatId): boolean => {
+  sendMessageByType = (msgObject: WTS, chatId: ChatId): boolean => {
     try {
       let messageOptions: TelegramBot.SendMessageOptions | TelegramBot.SendPhotoOptions | TelegramBot.SendVideoOptions = {
         parse_mode: "HTML",
         disable_web_page_preview: true
       };
     
-      if ("replyMarkup" in MBMO) {
+      if ("replyMarkup" in msgObject) {
         messageOptions = {
          ...messageOptions,
-          reply_markup: MBMO.replyMarkup
+          reply_markup: msgObject.replyMarkup
         }
       }
     
-      if ("video" in MBMO && MBMO.video !== undefined) {
+      if ("video" in msgObject && msgObject.video !== undefined && msgObject.video !== false && msgObject.video !== true) {
     
-        const videoFilePath = join(__dirname, "./media/videos", MBMO.video.path);
+        const videoFilePath = join(__dirname, "../media/videos", messageVideoDetails.path);
         const videoStream = createReadStream(videoFilePath);
     
-        if ("text" in MBMO) {
+        if ("text" in msgObject) {
           messageOptions = {
            ...messageOptions,
-            caption: MBMO.text
+            caption: msgObject.text
           }
         }
     
-        if ("entities" in MBMO) {
+        if ("entities" in msgObject) {
           messageOptions = {
            ...messageOptions,
-           caption_entities: MBMO.entities
+           caption_entities: msgObject.entities
           }
         }
     
         messageOptions = {
           ...messageOptions,
-          width: MBMO.video.width,
-          height: MBMO.video.height
+          width: msgObject.video.width,
+          height: msgObject.video.height
         }
     
         bot.sendVideo(chatId, videoStream, messageOptions, {
@@ -1037,29 +1165,29 @@ class ClimaxManager {
             climaxPostOnCreation.setState("lastPreviewMessageId", sentMessage.message_id);
           }
         }).catch((error) => {
-          console.log("Error sending message on MBMO type: ", error); 
+          console.log("Error sending message on msgObject type: ", error); 
           return false;
         });
     
         return true;
       }
     
-      if ("image" in MBMO && MBMO.image !== undefined) {
+      if ("image" in msgObject && msgObject.image !== undefined && msgObject.image !== false && msgObject.image !== true) {
         // send photo message
-        const imageFilePath = join(__dirname, "./media/imgs", MBMO.image);
+        const imageFilePath = join(__dirname, "../media/imgs", msgObject.image);
         const imageStream = createReadStream(imageFilePath);
     
-        if ("text" in MBMO) {
+        if ("text" in msgObject) {
           messageOptions = {
            ...messageOptions,
-            caption: MBMO.text
+            caption: msgObject.text
           }
         }
     
-        if ("entities" in MBMO) {
+        if ("entities" in msgObject) {
           messageOptions = {
            ...messageOptions,
-           caption_entities: MBMO.entities
+           caption_entities: msgObject.entities
           }
         }
     
@@ -1076,21 +1204,21 @@ class ClimaxManager {
         return true;
       }
     
-      if (MBMO.text !== undefined) {
-        if ("entities" in MBMO) {
+      if (msgObject.text !== undefined) {
+        if ("entities" in msgObject) {
           messageOptions = {
            ...messageOptions,
-            entities: MBMO.entities
+            entities: msgObject.entities
           }
         }
     
-        bot.sendMessage(chatId, MBMO.text, messageOptions)
+        bot.sendMessage(chatId, msgObject.text, messageOptions)
         .then((sentMessage) => {
           if (chatId === TWM_ADMIN || chatId === INCENIX) {
             climaxPostOnCreation.setState("lastPreviewMessageId", sentMessage.message_id);
           }
         }).catch((error) => {
-          console.log("Error sending message on MBMO type: ", error); 
+          console.log("Error sending message on msgObject type: ", error); 
           return false;
         });
   
@@ -1104,290 +1232,9 @@ class ClimaxManager {
     return true
   }
 
-  sendDayEndMessage = (dayHistory: dayHistory, chatId: ChatId) => {
-    const sessionOfDay: string[] = Object.keys(dayHistory);
-
-    const getDayFormatted = () => {
-      const today = new Date();
-      const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-      const dayOfMonth = today.getDate();
-      
-      const ordinalSuffix = (n: number) => ['th', 'st', 'nd', 'rd'][((n % 100) - 20) % 10] || 'th';
-      
-      return `${daysOfWeek[today.getDay()]}, ${months[today.getMonth()]} ${dayOfMonth}${ordinalSuffix(dayOfMonth)}, ${today.getFullYear()}`;
-    }
-
-    let tWins = 0;
-    let tLosses = 0;
-
-    const countWinsAndLosses = (history: History[]): void => {
-      const { wins, losses } = history.reduce(
-        (acc, signal) => {
-          if (signal.result && signal.result.includes("WIN")) {
-            acc.wins += 1;
-          } else {
-            acc.losses += 1;
-          }
-          return acc;
-        },
-        { wins: 0, losses: 0 }
-      );
-    
-      tWins += wins;
-      tLosses += losses;
-    };
-
-    const accuracyPercentage = (wins: number, losses: number): string => {
-      const totalSignals = wins+losses;
-      const per = wins/totalSignals;
-      return `${(per * 100).toFixed(2)}%`;
-    }
-
-    let mts = `<strong>🧾 DIALY REPORT</strong>\n`
-    mts += `<strong>🗓 ${getDayFormatted()}</strong>\n\n`
-    mts += `<pre>\n`
-
-    for (const sessionName of sessionOfDay) {
-      const sessionHistory: SignalHistory = dayHistory[sessionName];
-      countWinsAndLosses(sessionHistory);
-
-      mts += `\n<code>${sessionName.toLocaleUpperCase()} SESSION</code>\n`
-      mts += `<code>➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖</code>\n`
-      sessionHistory.map((history: History) => {
-        mts += `<code><strong>${history.initialTime} • ${history.pair} • ${(history.result !== null) ? history.result.split("-")[0] : history.direction}</strong></code>\n`
-      })
-    }
-    mts += `\n</pre>\n\n`;
-    mts += `<strong>${sessionManager.returnEmoji(tWins.toString())} ${(tWins > 1) ? "WINS" : "WIN"} - ${sessionManager.returnEmoji(tLosses.toString())} ${(tLosses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
-    mts += `<strong>❇️ Accuracy: ${accuracyPercentage(tWins, tLosses)}</strong>\n\n`;
-    mts += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
-
-    bot.sendMessage(T_W_M as ChatId, mts, {
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "SHARE TESTIMONY", url: "https://t.me/twmsupports" }],
-          [{ text: "LEARN HOW TO TRADE", url: "https://telegra.ph/STRICT-INSTRUCTIONS-ON-HOW-TO-TRADE-SUCCESSFULLY-02-09" }],
-        ]
-      }
-    }).then(() => {
-      bot.sendMessage(chatId, "Day End Message Sent Successsfully!");
-    });
-
-    console.log('----- DAILY REPORT SENT SUCCESSFULLY -----');
-  }
-
 }
 
-const botManager = new ClimaxManager();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-const handleSessionEnd = (sessionName: string, chatId: ChatId, called: boolean = false) => {
-  const signalHistory = sessionManager.getHistory();
-
-  if (called && signalHistory.length === 0) {
-    bot.sendMessage(chatId as ChatId, "No signal has been sent this session, so there's nothing to end");
-    return;
-  }
-
-  if (signalHistory.length !== 0) {
-    try {
-      const options = {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: 'Yes', callback_data: 'yes' },
-              { text: 'No', callback_data: 'no' }
-            ]
-          ]
-        }
-      };
-  
-      bot.sendMessage(chatId, `Do you want to post the session end message for ${sessionName} session?`, options)
-      .then(sentMessage => {
-        const messageId = sentMessage.message_id;
-        const sessionCanEnd = sessionManager.checkSessionValidity();
-  
-        const timeoutId = setTimeout(() => {
-          if (!sessionCanEnd) {
-            bot.sendMessage(chatId as ChatId, "Session has a signal without a result, can't end session yet...")
-            return;
-          }
-
-          if (sessionCanEnd) {
-            sessionManager.sendSessionEndMessage();
-            const prSh = sessionManager.getPostTime();
-            // signalManager.saveHistoryForDay(prSh, signalHistory);
-            botManager.setLastBotMessageId(chatId as ChatId, 0);
-            // signalManager.clearHistory();
-            bot.editMessageText("Session end message successfully posted...automatically", {
-              chat_id: chatId,
-              message_id: messageId
-            })
-            console.log("---------------------------------");
-            console.log("------- SESSION ENDED -----------");
-          }
-          
-        }, 5 * 60 * 1000);
-  
-        bot.on('callback_query', callbackQuery => {
-          if (callbackQuery.message?.message_id === messageId) {
-            clearTimeout(timeoutId);
-            const response = callbackQuery.data;
-            if (response === 'yes' && sessionCanEnd) {
-              if (!sessionCanEnd) {
-                bot.sendMessage(chatId as ChatId, "Session has a signal without a result, can't end session yet...");
-                return;
-              }
-
-              sessionManager.sendSessionEndMessage();
-              const prSh = sessionManager.getPostTime();
-              // signalManager.saveHistoryForDay(prSh, signalHistory);
-              // signalManager.clearHistory();
-              botManager.setLastBotMessageId(chatId as ChatId, 0);
-              bot.editMessageText("Session end message successfully posted...", {
-                chat_id: chatId,
-                message_id: messageId
-              });
-              console.log("---------------------------------");
-              console.log("------- SESSION ENDED -----------");
-            }
-
-            if (response === 'no' && sessionCanEnd) {
-              bot.editMessageText("Okay, but you will need to end the session manually...YOURSELF", {
-                chat_id: chatId,
-                message_id: messageId
-              });
-            }
-          }
-        });
-      });
-      
-    } catch (err) {
-      bot.sendMessage(chatId as ChatId, "Unable to send session end message for some reason. Please try again..");
-    }
-  }
-}
-
-const handleDayEnd = () => {
-  // const historyOfDay = signalManager.getDayHistory();
-  const lastAdmin = botManager.getLastAdmin();
-
-  if (lastAdmin!== null) {
-    console.log("HAnding Day End!")
-    // botManager.sendDayEndMessage(historyOfDay, lastAdmin);
-    // signalManager.clearDayHistory();
-  } else {
-    console.log("No admin found to send day end message");
-  }
-}
-
-const scheduleClimaxCrons = () => {
-  console.log("Will schedule all T_W_M crons...");
-
-  const rawCronFileData = readFileSync(DATABASE.CRONS, 'utf-8');
-  const cronFileData = JSON.parse(rawCronFileData);
-
-  cronFileData.forEach((cronJob: ClimaxCronJobObject) => {
-    // console.log(`Running ${cronJob.name} job at..`);
-
-    cronJob.schedule.forEach((cronExpression) => {
-      if (cronJob.id === "session_end") {
-
-        cron.schedule(cronExpression, () => {
-          const lastController = botManager.getLastAdmin();
-          handleSessionEnd(cronJob.name, lastController as ChatId);
-        }, { timezone: cronJob.timezone });
-
-      } else if (cronJob.id === "day_end") {
-        
-        cron.schedule(cronExpression, () => {
-          handleDayEnd();
-        }, { timezone: cronJob.timezone });
-
-      } else {
-        const MBMO: WTS = botManager.getMessageFromBank({ id: cronJob.id });
-
-        if (MBMO !== undefined) {
-          cron.schedule(cronExpression, () => {
-            if (cronJob.id === "overnight_start" || cronJob.id === "morning_start" || cronJob.id === "afternoon_start") {
-              const prSesh = sessionManager.getPostTime();
-              botManager.setPresentSession(prSesh || cronJob.id.split("_")[0].toLocaleUpperCase());
-              console.log(`......New session commences: ${prSesh || cronJob.id.split("_")[0].toLocaleUpperCase()} SESSION`);
-            }
-            // TODO: Implement job logic
-              botManager.sendMessageOnMBMOType(MBMO, T_W_M);
-          }, { timezone: cronJob.timezone });
-        }
-      }
-    });
-  });
-};
-
-scheduleClimaxCrons();
-
-
-
-
-
-
-
-
-
-
-
-// start the bot
+const botManager = new BotManager();
 
 bot.onText(/\/start/, (msg: TelegramBot.Message) => {
   const chatId: ChatId | undefined = msg?.from?.id;
@@ -1412,8 +1259,6 @@ bot.onText(/\/start/, (msg: TelegramBot.Message) => {
   }
   
 });
-
-// creating and sending signals
 
 bot.onText(/\/signal/, (msg: TelegramBot.Message) => {
   const chatId: ChatId | undefined = msg?.from?.id;
@@ -1442,8 +1287,6 @@ const pairRegex = /[A-Z]{3}\/[A-Z]{3} \(OTC\)/;
 const hourRegex = /.*hour_.*/;
 const minuteRegex = /.*minute_.*/;
 const winRegex = /.*martingale.*/;
-
-// sedning results to channel
 
 bot.onText(/\/result/, (msg: TelegramBot.Message) => {
   const chatId: ChatId | undefined = msg?.from?.id;
@@ -1477,44 +1320,7 @@ bot.onText(/\/result/, (msg: TelegramBot.Message) => {
   } else {
     bot.sendMessage(chatId as ChatId, "You are not authorized to use this bot");
   }
-})
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+});
 
 bot.on("callback_query", async (callbackQuery: TelegramBot.CallbackQuery) => {
   const msg = callbackQuery.message;
@@ -1665,11 +1471,9 @@ bot.on("callback_query", async (callbackQuery: TelegramBot.CallbackQuery) => {
 
     if (
       signalManager.checkSignalObject(action) &&
-      T_W_M !== undefined
+      channelId !== undefined
     ) {
-      const message = signalManager.createNewSignal()
-
-      // lastAdmin = chatId;
+      const message = await signalManager.createNewSignal();
 
       botManager.sendToChannel(message, chatId as ChatId, {
         parse_mode: "HTML",
@@ -1690,23 +1494,23 @@ bot.on("callback_query", async (callbackQuery: TelegramBot.CallbackQuery) => {
 
     if (winRegex.test(action) || action === "lossBoth") {
       if (action === "martingale0") {
-        sessionManager.saveResult(resultManager.callDirect());
+        db.updateSignal(resultManager.callDirect());
         climaxPostOnCreation.setState("presentSignalResult", resultManager.callDirect());
       }
       if (action === "martingale1") {
-        sessionManager.saveResult(resultManager.callMartingale1());
+        db.updateSignal(resultManager.callMartingale1());
         climaxPostOnCreation.setState("presentSignalResult", resultManager.callMartingale1());
       }
       if (action === "martingale2") {
-        sessionManager.saveResult(resultManager.callMartingale2());
+        db.updateSignal(resultManager.callMartingale2());
         climaxPostOnCreation.setState("presentSignalResult", resultManager.callMartingale2());
       }
       if (action === "martingale3") {
-        sessionManager.saveResult(resultManager.callMartingale3());
+        db.updateSignal(resultManager.callMartingale3());
         climaxPostOnCreation.setState("presentSignalResult", resultManager.callMartingale3());
       }
       if (action === "lossBoth") {
-        sessionManager.saveResult("❌ LOSS");
+        db.updateSignal("❌ LOSS");
         climaxPostOnCreation.setState("presentSignalResult", resultManager.callLossType1());
       }
 
@@ -1729,13 +1533,15 @@ bot.on("callback_query", async (callbackQuery: TelegramBot.CallbackQuery) => {
       const ARI = climaxPostOnCreation.awaitingResultImage();
 
       if (ARI) {
+        console.log("About to send result with image...");
         const resultType = climaxPostOnCreation.presentSignalResult();
         const resultTypeDefined = resultType === resultManager.callLossType1() ? resultManager.callLossType2() : climaxPostOnCreation.presentSignalResult()
         const resultImage = climaxPostOnCreation.resultImagePath();
+        const resultImageStream = createReadStream(resultImage);
 
         bot.deleteMessage(chatId as ChatId, botManager.lastBotMessageId(chatId as ChatId)).then(() => {
           if (resultImage !== undefined) {
-            bot.sendPhoto(T_W_M, resultImage, {
+            bot.sendPhoto(channelId, resultImageStream, {
               caption: resultTypeDefined
             }).then(() => bot.sendMessage(chatId as ChatId, "Result posted successfully..."));
           }
@@ -1776,7 +1582,7 @@ bot.on("photo", async (message: TelegramBot.Message) => {
         const ARI = climaxPostOnCreation.awaitingResultImage();
         if (ARI) {
           const resultImageWIthWatermark = await resultManager.callLossType2Image(fileId as string);
-          if (resultImageWIthWatermark !== undefined) {
+          if (resultImageWIthWatermark !== null) {
             const keyboard = [
               [{ text: "⏫ Send to Channel", callback_data: "send_result"}],
               [{ text: "Cancel Operation", callback_data: "cancel_op" }]
@@ -1796,29 +1602,22 @@ bot.on("photo", async (message: TelegramBot.Message) => {
 
 
 
-bot.onText(/\/endsession/, (msg: TelegramBot.Message) =>{
-  const presentSession = botManager.getPresentSession();
+bot.onText(/\/endsession/, async (msg: TelegramBot.Message) =>{
   const chatId = msg.from?.id;
-
-  const prSesh = sessionManager.getPostTime();
-  handleSessionEnd(prSesh || presentSession, chatId as ChatId, true);
+  await sessionManager.endSession(chatId as ChatId, true);
 });
 
-bot.onText(/\/endday/, (msg: TelegramBot.Message) =>{
-  const presentSession = botManager.getPresentSession();
-  const chatId = msg.from?.id;
-  
-  handleDayEnd();
+bot.onText(/\/endday/, async (msg: TelegramBot.Message) =>{
+  const chatId = msg.from?.id
+  sessionManager.endDay(chatId as ChatId);
 });
 
-
-
-
+sessionManager.scheduleClimaxCrons();
 
 app.get("/", (req, res) => {
-    res.send("Halskey_TWM v2.0.3 is running...");
+    res.send("Halskey v2.1.0 for TWM is running...");
 });
 
 app.listen(port, () => {
-    console.log("Halskey_TWM v2.0.3 is running...");
+    console.log("Halskey v2.1.0 for TWM is running...");
 });
