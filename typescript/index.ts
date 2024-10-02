@@ -334,7 +334,7 @@ class Session {
     }
   }
 
-  endDay = (chatId: ChatId) => {
+  endDay = async (chatId: ChatId) => {
     bot.sendMessage(chatId as ChatId, "Please wait... curating signals")
     .then(async (sentMessage) => {
       const dayHistory = await db.getDaySignals();
@@ -404,9 +404,9 @@ class Session {
       mts += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
 
       bot.deleteMessage(chatId as ChatId, sentMessage.message_id)
-      .then(() => {
+      .then(async () => {
         console.log("Sending message...");
-        bot.sendMessage(channelId as ChatId, mts, {
+        await bot.sendMessage(channelId as ChatId, mts, {
           parse_mode: "HTML",
           reply_markup: {
             inline_keyboard: [
@@ -414,9 +414,9 @@ class Session {
               [{ text: "LEARN HOW TO TRADE", url: "https://telegra.ph/STRICT-INSTRUCTIONS-ON-HOW-TO-TRADE-SUCCESSFULLY-02-09" }],
             ]
           }
-        }).then(() => {
-          bot.sendMessage(chatId, "Day End Message Sent Successsfully!");
-          console.log('|| ===== DAILY REPORT SENT SUCCESSFULLY ===== ||');
+        }).then(async () => {
+          await bot.sendMessage(chatId, "Day End Message Sent Successsfully!");
+          console.log('|===>> DAILY REPORT SENT SUCCESSFULLY <<===|');
         });
       })
     });
@@ -424,30 +424,33 @@ class Session {
 
   scheduleClimaxCrons = async () => {
     console.log("Will schedule all Channel crons...");
-    const cronFileData = await db.getChannelCrons();
+    const cronScheduleArray = await db.getChannelCrons();
     const cronPosts: DBCronPost[] = await db.getChannelCronPosts();
   
-    cronFileData.forEach((cronJob: DBCron) => {
+    cronScheduleArray.forEach((cronJob: DBCron, idx1) => {
       // console.log(`Running ${cronJob.name} job at..`);
   
-      cronJob.schedule.forEach(async (cronExpression) => {
+      cronJob.schedule.forEach((cronExpression) => {
+          
         if (cronJob.cron_id === "session_end") {
   
-          cron.schedule(cronExpression, () => {
+          cron.schedule(cronExpression, async () => {
             const lastController = botManager.getLastAdmin();
-            sessionManager.endSession(lastController as ChatId);
+            console.log("Sending message for ", cronJob.cron_id);
+            await sessionManager.endSession(lastController as ChatId);
           }, { timezone: cronJob.timezone });
   
         } else if (cronJob.cron_id === "day_end") {
           
-          cron.schedule(cronExpression, () => {
+          cron.schedule(cronExpression, async () => {
             const lastController = botManager.getLastAdmin();
-            sessionManager.endDay(lastController as ChatId)
+            console.log("Sending message for ", cronJob.cron_id);
+            await sessionManager.endDay(lastController as ChatId)
           }, { timezone: cronJob.timezone });
   
         } else {
           if (cronPosts.length !== 0) {
-            cron.schedule(cronExpression, () => {
+            cron.schedule(cronExpression, async () => {
               
               let modifiedDBPost: WTS = {
                 name: "",
@@ -468,7 +471,7 @@ class Session {
                 modifiedDBPost = {
                   ...cronToPost,
                   id: cronToPost.message_id,
-                  image: join(__dirname, './media/imgs/brand/', cronToPost.message_id)
+                  image: join(__dirname, '../media/imgs/brand/', `${(cronToPost.message_id.includes("get_ready")) ? 'get_ready' : cronToPost.message_id}.jpg`)
                 }
               }
 
@@ -477,7 +480,10 @@ class Session {
                 console.log(`...New session commences: ${prSesh || cronJob.cron_id.split("_")[0].toLocaleUpperCase()} SESSION`);
               }
 
-              (Object.keys(modifiedDBPost).length === 0) && botManager.sendMessageByType(modifiedDBPost, channelId);
+              if (Object.keys(modifiedDBPost).length !== 0) {
+                console.log("Sending message for ", modifiedDBPost.id);
+                await botManager.sendMessageByType(modifiedDBPost, channelId);
+              }
             
             }, { timezone: cronJob.timezone });
           }
@@ -826,10 +832,10 @@ class ClimaxPostCreation {
     this.POST.entities = messageEntity;
   };
 
-  public setPostReplyMarkup = (
+  public setPostreply_markup = (
     inlineMarkup: TelegramBot.InlineKeyboardButton[][]
   ) => {
-    this.POST.replyMarkup = {
+    this.POST.reply_markup = {
       inline_keyboard: inlineMarkup,
     };
   };
@@ -882,7 +888,7 @@ class ClimaxPostCreation {
     };
 
     if (this.STATE.awaitingPostText) {
-      corRes.replyMarkup = {
+      corRes.reply_markup = {
         inline_keyboard: [
           [
             { text: "📝 Remove Text", callback_data: "post_remove_text" },
@@ -900,7 +906,7 @@ class ClimaxPostCreation {
     }
 
     if (this.STATE.awaitingPostPhoto && this.POST.text === "") {
-      corRes.replyMarkup = {
+      corRes.reply_markup = {
         inline_keyboard: [
           [
             { text: "📝 Send Text", callback_data: "post_add_text" },
@@ -915,7 +921,7 @@ class ClimaxPostCreation {
     }
 
     if (this.STATE.awaitingPostPhoto && this.POST.text !== "") {
-      corRes.replyMarkup = {
+      corRes.reply_markup = {
         inline_keyboard: [
           [
             { text: "📝 Remove Text", callback_data: "post_add_text" },
@@ -930,7 +936,7 @@ class ClimaxPostCreation {
     }
 
     if (this.STATE.awaitingPostVideo && this.POST.text === "") {
-      corRes.replyMarkup = {
+      corRes.reply_markup = {
         inline_keyboard: [
           [
             { text: "📝 Add Text", callback_data: "post_add_text" },
@@ -945,7 +951,7 @@ class ClimaxPostCreation {
     }
 
     if (this.STATE.awaitingPostVideo && this.POST.text !== "") {
-      corRes.replyMarkup = {
+      corRes.reply_markup = {
         inline_keyboard: [
           [
             { text: "📝 Remove Text", callback_data: "post_remove_text" },
@@ -995,8 +1001,8 @@ class BotManager {
   }
 
   constructor () {
-      // this.lastAdmin = 0;
-      this.lastAdmin = INCENIX as ChatId;
+      this.lastAdmin = 0;
+      // this.lastAdmin = INCENIX as ChatId;
       this.presentSession = "";
     
       this.CONVERSATIONS = {
@@ -1119,22 +1125,22 @@ class BotManager {
     }
   }
 
-  sendMessageByType = (msgObject: WTS, chatId: ChatId): boolean => {
+  sendMessageByType = async (msgObject: WTS, chatId: ChatId): Promise<boolean> => {
     try {
       let messageOptions: TelegramBot.SendMessageOptions | TelegramBot.SendPhotoOptions | TelegramBot.SendVideoOptions = {
         parse_mode: "HTML",
         disable_web_page_preview: true
       };
     
-      if ("replyMarkup" in msgObject) {
+      if ("reply_markup" in msgObject) {
         messageOptions = {
          ...messageOptions,
-          reply_markup: msgObject.replyMarkup
+          reply_markup: msgObject.reply_markup
         }
       }
     
       if ("video" in msgObject && msgObject.video !== undefined && msgObject.video !== false && msgObject.video !== true) {
-    
+
         const videoFilePath = join(__dirname, "../media/videos", messageVideoDetails.path);
         const videoStream = createReadStream(videoFilePath);
     
@@ -1158,7 +1164,7 @@ class BotManager {
           height: msgObject.video.height
         }
     
-        bot.sendVideo(chatId, videoStream, messageOptions, {
+        await bot.sendVideo(chatId, videoStream, messageOptions, {
           contentType: "application/octet-stream"
         }).then((sentMessage) => {
           if (chatId === TWM_ADMIN || chatId === INCENIX) {
@@ -1174,8 +1180,7 @@ class BotManager {
     
       if ("image" in msgObject && msgObject.image !== undefined && msgObject.image !== false && msgObject.image !== true) {
         // send photo message
-        const imageFilePath = join(__dirname, "../media/imgs", msgObject.image);
-        const imageStream = createReadStream(imageFilePath);
+        const imageStream = createReadStream(msgObject.image);
     
         if ("text" in msgObject) {
           messageOptions = {
@@ -1191,7 +1196,7 @@ class BotManager {
           }
         }
     
-        bot.sendPhoto(chatId, imageStream, messageOptions, {
+        await bot.sendPhoto(chatId, imageStream, messageOptions, {
           contentType: "application/octet-stream"
         }).then((sentMessage) => {
           if (chatId === TWM_ADMIN || chatId === INCENIX) {
@@ -1615,9 +1620,10 @@ bot.onText(/\/endday/, async (msg: TelegramBot.Message) =>{
 sessionManager.scheduleClimaxCrons();
 
 app.get("/", (req, res) => {
-    res.send("Halskey v2.1.0 for TWM is running...");
+    res.send("Halskey v2.2.0 for TWM is running...");
 });
 
 app.listen(port, () => {
-    console.log("Halskey v2.1.0 for TWM is running...");
+    console.log("Halskey v2.2.0 for TWM is running...");
 });
+

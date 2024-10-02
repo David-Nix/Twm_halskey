@@ -278,7 +278,7 @@ class Session {
                 }
             }
         });
-        this.endDay = (chatId) => {
+        this.endDay = (chatId) => __awaiter(this, void 0, void 0, function* () {
             bot.sendMessage(chatId, "Please wait... curating signals")
                 .then((sentMessage) => __awaiter(this, void 0, void 0, function* () {
                 const dayHistory = yield db.getDaySignals();
@@ -333,9 +333,9 @@ class Session {
                 mts += `<strong>❇️ Accuracy: ${accuracyPercentage(tWins, tLosses)}</strong>\n\n`;
                 mts += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
                 bot.deleteMessage(chatId, sentMessage.message_id)
-                    .then(() => {
+                    .then(() => __awaiter(this, void 0, void 0, function* () {
                     console.log("Sending message...");
-                    bot.sendMessage(channelId, mts, {
+                    yield bot.sendMessage(channelId, mts, {
                         parse_mode: "HTML",
                         reply_markup: {
                             inline_keyboard: [
@@ -343,35 +343,37 @@ class Session {
                                 [{ text: "LEARN HOW TO TRADE", url: "https://telegra.ph/STRICT-INSTRUCTIONS-ON-HOW-TO-TRADE-SUCCESSFULLY-02-09" }],
                             ]
                         }
-                    }).then(() => {
-                        bot.sendMessage(chatId, "Day End Message Sent Successsfully!");
-                        console.log('|| ===== DAILY REPORT SENT SUCCESSFULLY ===== ||');
-                    });
-                });
+                    }).then(() => __awaiter(this, void 0, void 0, function* () {
+                        yield bot.sendMessage(chatId, "Day End Message Sent Successsfully!");
+                        console.log('|===>> DAILY REPORT SENT SUCCESSFULLY <<===|');
+                    }));
+                }));
             }));
-        };
+        });
         this.scheduleClimaxCrons = () => __awaiter(this, void 0, void 0, function* () {
             console.log("Will schedule all Channel crons...");
-            const cronFileData = yield db.getChannelCrons();
+            const cronScheduleArray = yield db.getChannelCrons();
             const cronPosts = yield db.getChannelCronPosts();
-            cronFileData.forEach((cronJob) => {
+            cronScheduleArray.forEach((cronJob, idx1) => {
                 // console.log(`Running ${cronJob.name} job at..`);
-                cronJob.schedule.forEach((cronExpression) => __awaiter(this, void 0, void 0, function* () {
+                cronJob.schedule.forEach((cronExpression) => {
                     if (cronJob.cron_id === "session_end") {
-                        cron.schedule(cronExpression, () => {
+                        cron.schedule(cronExpression, () => __awaiter(this, void 0, void 0, function* () {
                             const lastController = botManager.getLastAdmin();
-                            sessionManager.endSession(lastController);
-                        }, { timezone: cronJob.timezone });
+                            console.log("Sending message for ", cronJob.cron_id);
+                            yield sessionManager.endSession(lastController);
+                        }), { timezone: cronJob.timezone });
                     }
                     else if (cronJob.cron_id === "day_end") {
-                        cron.schedule(cronExpression, () => {
+                        cron.schedule(cronExpression, () => __awaiter(this, void 0, void 0, function* () {
                             const lastController = botManager.getLastAdmin();
-                            sessionManager.endDay(lastController);
-                        }, { timezone: cronJob.timezone });
+                            console.log("Sending message for ", cronJob.cron_id);
+                            yield sessionManager.endDay(lastController);
+                        }), { timezone: cronJob.timezone });
                     }
                     else {
                         if (cronPosts.length !== 0) {
-                            cron.schedule(cronExpression, () => {
+                            cron.schedule(cronExpression, () => __awaiter(this, void 0, void 0, function* () {
                                 let modifiedDBPost = {
                                     name: "",
                                     id: ""
@@ -381,17 +383,20 @@ class Session {
                                     modifiedDBPost = Object.assign(Object.assign({}, cronToPost), { id: cronToPost.message_id, video: messageVideoDetails });
                                 }
                                 if (cronToPost === null || cronToPost === void 0 ? void 0 : cronToPost.image) {
-                                    modifiedDBPost = Object.assign(Object.assign({}, cronToPost), { id: cronToPost.message_id, image: join(__dirname, './media/imgs/brand/', cronToPost.message_id) });
+                                    modifiedDBPost = Object.assign(Object.assign({}, cronToPost), { id: cronToPost.message_id, image: join(__dirname, './media/imgs/brand/', `${(cronToPost.message_id.includes("get_ready")) ? 'get_ready' : cronToPost.message_id}.jpg`) });
                                 }
                                 if (cronJob.cron_id === "overnight_start" || cronJob.cron_id === "morning_start" || cronJob.cron_id === "afternoon_start") {
                                     const prSesh = sessionManager.getPresentSession();
                                     console.log(`...New session commences: ${prSesh || cronJob.cron_id.split("_")[0].toLocaleUpperCase()} SESSION`);
                                 }
-                                (Object.keys(modifiedDBPost).length === 0) && botManager.sendMessageByType(modifiedDBPost, channelId);
-                            }, { timezone: cronJob.timezone });
+                                if (Object.keys(modifiedDBPost).length !== 0) {
+                                    console.log("Sending message for ", modifiedDBPost.id);
+                                    yield botManager.sendMessageByType(modifiedDBPost, channelId);
+                                }
+                            }), { timezone: cronJob.timezone });
                         }
                     }
-                }));
+                });
             });
         });
         this.history = [];
@@ -672,8 +677,8 @@ class ClimaxPostCreation {
         this.setPostEntites = (messageEntity) => {
             this.POST.entities = messageEntity;
         };
-        this.setPostReplyMarkup = (inlineMarkup) => {
-            this.POST.replyMarkup = {
+        this.setPostreply_markup = (inlineMarkup) => {
+            this.POST.reply_markup = {
                 inline_keyboard: inlineMarkup,
             };
         };
@@ -712,7 +717,7 @@ class ClimaxPostCreation {
                 text: "What you're seeing above is a preview of your message (presently).\n\n<strong>Note: <i>When you start to create buttons, you CAN NOT remove the text, video or image anymore..</i></strong>\n\nWhat would you like to do next?",
             };
             if (this.STATE.awaitingPostText) {
-                corRes.replyMarkup = {
+                corRes.reply_markup = {
                     inline_keyboard: [
                         [
                             { text: "📝 Remove Text", callback_data: "post_remove_text" },
@@ -728,7 +733,7 @@ class ClimaxPostCreation {
                 this.STATE.awaitingPostText = false;
             }
             if (this.STATE.awaitingPostPhoto && this.POST.text === "") {
-                corRes.replyMarkup = {
+                corRes.reply_markup = {
                     inline_keyboard: [
                         [
                             { text: "📝 Send Text", callback_data: "post_add_text" },
@@ -741,7 +746,7 @@ class ClimaxPostCreation {
                 this.STATE.awaitingPostPhoto = false;
             }
             if (this.STATE.awaitingPostPhoto && this.POST.text !== "") {
-                corRes.replyMarkup = {
+                corRes.reply_markup = {
                     inline_keyboard: [
                         [
                             { text: "📝 Remove Text", callback_data: "post_add_text" },
@@ -754,7 +759,7 @@ class ClimaxPostCreation {
                 this.STATE.awaitingPostPhoto = false;
             }
             if (this.STATE.awaitingPostVideo && this.POST.text === "") {
-                corRes.replyMarkup = {
+                corRes.reply_markup = {
                     inline_keyboard: [
                         [
                             { text: "📝 Add Text", callback_data: "post_add_text" },
@@ -767,7 +772,7 @@ class ClimaxPostCreation {
                 this.STATE.awaitingPostVideo = false;
             }
             if (this.STATE.awaitingPostVideo && this.POST.text !== "") {
-                corRes.replyMarkup = {
+                corRes.reply_markup = {
                     inline_keyboard: [
                         [
                             { text: "📝 Remove Text", callback_data: "post_remove_text" },
@@ -905,14 +910,14 @@ class BotManager {
                 });
             }
         };
-        this.sendMessageByType = (msgObject, chatId) => {
+        this.sendMessageByType = (msgObject, chatId) => __awaiter(this, void 0, void 0, function* () {
             try {
                 let messageOptions = {
                     parse_mode: "HTML",
                     disable_web_page_preview: true
                 };
-                if ("replyMarkup" in msgObject) {
-                    messageOptions = Object.assign(Object.assign({}, messageOptions), { reply_markup: msgObject.replyMarkup });
+                if ("reply_markup" in msgObject) {
+                    messageOptions = Object.assign(Object.assign({}, messageOptions), { reply_markup: msgObject.reply_markup });
                 }
                 if ("video" in msgObject && msgObject.video !== undefined && msgObject.video !== false && msgObject.video !== true) {
                     const videoFilePath = join(__dirname, "./media/videos", messageVideoDetails.path);
@@ -924,7 +929,7 @@ class BotManager {
                         messageOptions = Object.assign(Object.assign({}, messageOptions), { caption_entities: msgObject.entities });
                     }
                     messageOptions = Object.assign(Object.assign({}, messageOptions), { width: msgObject.video.width, height: msgObject.video.height });
-                    bot.sendVideo(chatId, videoStream, messageOptions, {
+                    yield bot.sendVideo(chatId, videoStream, messageOptions, {
                         contentType: "application/octet-stream"
                     }).then((sentMessage) => {
                         if (chatId === TWM_ADMIN || chatId === INCENIX) {
@@ -938,15 +943,14 @@ class BotManager {
                 }
                 if ("image" in msgObject && msgObject.image !== undefined && msgObject.image !== false && msgObject.image !== true) {
                     // send photo message
-                    const imageFilePath = join(__dirname, "./media/imgs", msgObject.image);
-                    const imageStream = createReadStream(imageFilePath);
+                    const imageStream = createReadStream(msgObject.image);
                     if ("text" in msgObject) {
                         messageOptions = Object.assign(Object.assign({}, messageOptions), { caption: msgObject.text });
                     }
                     if ("entities" in msgObject) {
                         messageOptions = Object.assign(Object.assign({}, messageOptions), { caption_entities: msgObject.entities });
                     }
-                    bot.sendPhoto(chatId, imageStream, messageOptions, {
+                    yield bot.sendPhoto(chatId, imageStream, messageOptions, {
                         contentType: "application/octet-stream"
                     }).then((sentMessage) => {
                         if (chatId === TWM_ADMIN || chatId === INCENIX) {
@@ -978,9 +982,9 @@ class BotManager {
                 return false;
             }
             return true;
-        };
-        // this.lastAdmin = 0;
-        this.lastAdmin = INCENIX;
+        });
+        this.lastAdmin = 0;
+        // this.lastAdmin = INCENIX as ChatId;
         this.presentSession = "";
         this.CONVERSATIONS = {
             [TWM_ADMIN]: {
@@ -1304,8 +1308,8 @@ bot.onText(/\/endday/, (msg) => __awaiter(void 0, void 0, void 0, function* () {
 }));
 sessionManager.scheduleClimaxCrons();
 app.get("/", (req, res) => {
-    res.send("Halskey v2.1.0 for TWM is running...");
+    res.send("Halskey v2.2.0 for TWM is running...");
 });
 app.listen(port, () => {
-    console.log("Halskey v2.1.0 for TWM is running...");
+    console.log("Halskey v2.2.0 for TWM is running...");
 });

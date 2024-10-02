@@ -143,7 +143,7 @@ export interface WTS {
     path: string;
   } | boolean;
   entities?: TelegramBot.MessageEntity[];
-  replyMarkup?: TelegramBot.InlineKeyboardMarkup;
+  reply_markup?: TelegramBot.InlineKeyboardMarkup;
   otherOptions?: TelegramBot.Message;
 }
 
