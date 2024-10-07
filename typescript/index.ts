@@ -70,10 +70,20 @@ const channelId: ChatId = db.getChannelId();
 class Session {
   history: SignalHistory;
   dayHistory: dayHistory;
+  fileToUse: {
+    [key: string]: string;
+  }
 
   constructor() {
     this.history = [];
     this.dayHistory = {};
+    this.fileToUse = {
+      gen_info_night: "gen_info_night.jpg",
+      gen_info_morning: "gen_info_morning.jpg",
+      gen_info_noon: "gen_info_noon.jpg",
+      get_ready: "get_ready.jpg",
+      session_end: "session_end.jpg"
+    }
   }
 
   getPresentSession = (): string => {
@@ -342,8 +352,7 @@ class Session {
       const sessions = {
         OVERNIGHT: 'OVERNIGHT SESSION',
         MORNING: 'MORNING SESSION',
-        AFTERNOON: 'AFTERNOON SESSION',
-        OUTSIDE: 'OUTSIDE SESSION'
+        AFTERNOON: 'AFTERNOON SESSION'
       };
 
       const getDayFormatted = () => {
@@ -390,7 +399,7 @@ class Session {
       mts += `<pre>\n`
 
       Object.keys(sessions).forEach(session => {
-        mts += `<strong>${sessions[session as 'OVERNIGHT' | 'MORNING' | 'AFTERNOON' | 'OUTSIDE']}</strong>\n<strong><code>➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖</code></strong>\n`;
+        mts += `<strong>${sessions[session as 'OVERNIGHT' | 'MORNING' | 'AFTERNOON']}</strong>\n<strong><code>➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖</code></strong>\n`;
         dayHistory.filter(item => item.session === session)
           .forEach(item => {
             mts += `<strong><code>${item.initial_time} • ${item.pair} • ${(item.result !== null) ? item.result.split("-")[0] : item.direction}</code></strong>\n`;
@@ -471,7 +480,7 @@ class Session {
                 modifiedDBPost = {
                   ...cronToPost,
                   id: cronToPost.message_id,
-                  image: join(__dirname, '../media/imgs/brand/', `${(cronToPost.message_id.includes("get_ready")) ? 'get_ready' : cronToPost.message_id}.jpg`)
+                  image: join(__dirname, '../media/imgs/brand/', `${(cronToPost.message_id.includes("get_ready")) ? this.fileToUse.get_ready : this.fileToUse[cronToPost.message_id]}`)
                 }
               }
 
@@ -1573,7 +1582,6 @@ bot.on("callback_query", async (callbackQuery: TelegramBot.CallbackQuery) => {
 
 })
 
-
 // PHOTO LISTENERS AND LOGIC
 
 bot.on("photo", async (message: TelegramBot.Message) => {
@@ -1605,8 +1613,6 @@ bot.on("photo", async (message: TelegramBot.Message) => {
 
 })
 
-
-
 bot.onText(/\/endsession/, async (msg: TelegramBot.Message) =>{
   const chatId = msg.from?.id;
   await sessionManager.endSession(chatId as ChatId, true);
@@ -1620,10 +1626,10 @@ bot.onText(/\/endday/, async (msg: TelegramBot.Message) =>{
 sessionManager.scheduleClimaxCrons();
 
 app.get("/", (req, res) => {
-    res.send("Halskey v2.2.0 for TWM is running...");
+    res.send("Halskey v2.3.0 for TWM is running...");
 });
 
 app.listen(port, () => {
-    console.log("Halskey v2.2.0 for TWM is running...");
+    console.log("Halskey v2.3.0 for TWM is running...");
 });
 

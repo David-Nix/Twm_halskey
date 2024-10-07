@@ -285,8 +285,7 @@ class Session {
                 const sessions = {
                     OVERNIGHT: 'OVERNIGHT SESSION',
                     MORNING: 'MORNING SESSION',
-                    AFTERNOON: 'AFTERNOON SESSION',
-                    OUTSIDE: 'OUTSIDE SESSION'
+                    AFTERNOON: 'AFTERNOON SESSION'
                 };
                 const getDayFormatted = () => {
                     const today = new Date();
@@ -383,7 +382,7 @@ class Session {
                                     modifiedDBPost = Object.assign(Object.assign({}, cronToPost), { id: cronToPost.message_id, video: messageVideoDetails });
                                 }
                                 if (cronToPost === null || cronToPost === void 0 ? void 0 : cronToPost.image) {
-                                    modifiedDBPost = Object.assign(Object.assign({}, cronToPost), { id: cronToPost.message_id, image: join(__dirname, './media/imgs/brand/', `${(cronToPost.message_id.includes("get_ready")) ? 'get_ready' : cronToPost.message_id}.jpg`) });
+                                    modifiedDBPost = Object.assign(Object.assign({}, cronToPost), { id: cronToPost.message_id, image: join(__dirname, './media/imgs/brand/', `${(cronToPost.message_id.includes("get_ready")) ? this.fileToUse.get_ready : this.fileToUse[cronToPost.message_id]}`) });
                                 }
                                 if (cronJob.cron_id === "overnight_start" || cronJob.cron_id === "morning_start" || cronJob.cron_id === "afternoon_start") {
                                     const prSesh = sessionManager.getPresentSession();
@@ -401,6 +400,13 @@ class Session {
         });
         this.history = [];
         this.dayHistory = {};
+        this.fileToUse = {
+            gen_info_night: "gen_info_night.jpg",
+            gen_info_morning: "gen_info_morning.jpg",
+            gen_info_noon: "gen_info_noon.jpg",
+            get_ready: "get_ready.jpg",
+            session_end: "session_end.jpg"
+        };
     }
 }
 const sessionManager = new Session();
@@ -1308,8 +1314,8 @@ bot.onText(/\/endday/, (msg) => __awaiter(void 0, void 0, void 0, function* () {
 }));
 sessionManager.scheduleClimaxCrons();
 app.get("/", (req, res) => {
-    res.send("Halskey v2.2.0 for TWM is running...");
+    res.send("Halskey v2.3.0 for TWM is running...");
 });
 app.listen(port, () => {
-    console.log("Halskey v2.2.0 for TWM is running...");
+    console.log("Halskey v2.3.0 for TWM is running...");
 });
