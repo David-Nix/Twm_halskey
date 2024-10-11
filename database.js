@@ -40,8 +40,8 @@ class Database {
         this.updateSignal = (result) => __awaiter(this, void 0, void 0, function* () {
             yield this.pool.query(this.queries.updateSignalResult, [result, this.channelId]);
         });
-        this.validate = () => __awaiter(this, void 0, void 0, function* () {
-            const result = yield this.pool.query(this.queries.checkNullResults, [this.channelId]);
+        this.validate = (presentSession) => __awaiter(this, void 0, void 0, function* () {
+            const result = yield this.pool.query(this.queries.checkNullResultsInSession, [this.channelId, presentSession]);
             return result.rows;
         });
         this.pool = new Pool({
@@ -59,7 +59,7 @@ class Database {
             getSignalsBySession: `SELECT * FROM signals WHERE telegram_id = $1 AND session = $2 AND DATE(time_stamp) = CURRENT_DATE`,
             createSignal: `INSERT INTO signals (session, pair, direction, initial_time, telegram_id) VALUES ($1, $2, $3, $4, $5)`,
             updateSignalResult: `UPDATE signals SET result = $1 WHERE time_stamp = (SELECT time_stamp FROM signals WHERE telegram_id = $2 ORDER BY time_stamp DESC LIMIT 1)`,
-            checkNullResults: `SELECT * FROM signals WHERE telegram_id = $1 AND result IS NULL ORDER BY time_stamp DESC`
+            checkNullResultsInSession: `SELECT * FROM signals WHERE telegram_id = $1 AND session = $2 AND Date(time_stamp) = CURRENT_DATE AND result IS NULL ORDER BY time_stamp DESC`
         };
         this.channelId = -1002101961419;
         // this.initializeChannelId(channelName);

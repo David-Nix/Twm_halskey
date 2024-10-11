@@ -126,7 +126,7 @@ class Session {
                     timeout: 30000
                 });
                 filename = `${uuidv4()}.png`;
-                filePath = join(__dirname, './media/imgs', filename);
+                filePath = join(__dirname, '../media/imgs', filename);
                 writeFileSync(filePath, response.data, 'binary');
                 return { status: true, filename, filePath };
             }
@@ -136,8 +136,10 @@ class Session {
             }
         });
         this.checkSessionValidity = () => __awaiter(this, void 0, void 0, function* () {
-            const nullResultSignals = yield db.validate();
-            return (nullResultSignals.length === 0) ? true : false;
+            const presentSession = this.getPresentSession();
+            const nullResultSignals = yield db.validate(presentSession);
+            console.log("DB Validated: ", nullResultSignals);
+            return (nullResultSignals.length === 0);
         });
         this.getSessionAccuracy = (wins, losses) => {
             const totalSignals = wins + losses;
@@ -149,7 +151,7 @@ class Session {
         };
         this.sendSessionEndMessage = (presentSession, historyDB) => __awaiter(this, void 0, void 0, function* () {
             try {
-                const sessionEndPhotoPath = join(__dirname, "./media/imgs/brand/session_end.jpg");
+                const sessionEndPhotoPath = join(__dirname, "../media/imgs/brand/session_end.jpg");
                 const sessionEndPhotoStream = createReadStream(sessionEndPhotoPath);
                 const countWinsAndLosses = (history) => {
                     return history.reduce((acc, entry) => ({
@@ -382,7 +384,7 @@ class Session {
                                     modifiedDBPost = Object.assign(Object.assign({}, cronToPost), { id: cronToPost.message_id, video: messageVideoDetails });
                                 }
                                 if (cronToPost === null || cronToPost === void 0 ? void 0 : cronToPost.image) {
-                                    modifiedDBPost = Object.assign(Object.assign({}, cronToPost), { id: cronToPost.message_id, image: join(__dirname, './media/imgs/brand/', `${(cronToPost.message_id.includes("get_ready")) ? this.fileToUse.get_ready : this.fileToUse[cronToPost.message_id]}`) });
+                                    modifiedDBPost = Object.assign(Object.assign({}, cronToPost), { id: cronToPost.message_id, image: join(__dirname, '../media/imgs/brand/', `${(cronToPost.message_id.includes("get_ready")) ? this.fileToUse.get_ready : this.fileToUse[cronToPost.message_id]}`) });
                                 }
                                 if (cronJob.cron_id === "overnight_start" || cronJob.cron_id === "morning_start" || cronJob.cron_id === "afternoon_start") {
                                     const prSesh = sessionManager.getPresentSession();
@@ -926,7 +928,7 @@ class BotManager {
                     messageOptions = Object.assign(Object.assign({}, messageOptions), { reply_markup: msgObject.reply_markup });
                 }
                 if ("video" in msgObject && msgObject.video !== undefined && msgObject.video !== false && msgObject.video !== true) {
-                    const videoFilePath = join(__dirname, "./media/videos", messageVideoDetails.path);
+                    const videoFilePath = join(__dirname, "../media/videos", messageVideoDetails.path);
                     const videoStream = createReadStream(videoFilePath);
                     if ("text" in msgObject) {
                         messageOptions = Object.assign(Object.assign({}, messageOptions), { caption: msgObject.text });

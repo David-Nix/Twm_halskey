@@ -179,8 +179,10 @@ class Session {
   }
 
   checkSessionValidity = async (): Promise<boolean> => {
-    const nullResultSignals = await db.validate();
-    return (nullResultSignals.length === 0) ? true : false;
+    const presentSession = this.getPresentSession();
+    const nullResultSignals = await db.validate(presentSession);
+    console.log("DB Validated: ", nullResultSignals);
+    return (nullResultSignals.length === 0);
   }
 
   getSessionAccuracy = (wins: number, losses: number): { status: boolean; percentage: string; } => {
