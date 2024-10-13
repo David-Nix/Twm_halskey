@@ -170,7 +170,7 @@ export type ClimaxPostState = {
 export interface DBSignal {
   id: string;
   session: string;
-  date_stamp: ISO8601Date;
+  time_stamp: string;
   pair: string;
   direction: string;
   result: string;

@@ -30,6 +30,10 @@ class Database {
             const result = yield this.pool.query(this.queries.getDaySignals, [this.channelId]);
             return result.rows;
         });
+        this.getWeekSignals = () => __awaiter(this, void 0, void 0, function* () {
+            const result = yield this.pool.query(this.queries.getWeekSignals, [this.channelId]);
+            return result.rows;
+        });
         this.getSessionSignals = (session) => __awaiter(this, void 0, void 0, function* () {
             const result = yield this.pool.query(this.queries.getSignalsBySession, [this.channelId, session.toLocaleUpperCase()]);
             return result.rows;
@@ -56,6 +60,7 @@ class Database {
             getChannelCronPosts: `SELECT * FROM cron_posts WHERE telegram_id = $1`,
             getAllChannelSignals: `SELECT * FROM signals WHERE telegram_id = $1`,
             getDaySignals: `SELECT * FROM signals WHERE telegram_id = $1 AND DATE(time_stamp) = CURRENT_DATE ORDER BY session ASC`,
+            getWeekSignals: `SELECT * FROM signals WHERE telegram_id = $1 AND time_stamp >= NOW() - INTERVAL '7 days' ORDER BY time_stamp ASC`,
             getSignalsBySession: `SELECT * FROM signals WHERE telegram_id = $1 AND session = $2 AND DATE(time_stamp) = CURRENT_DATE`,
             createSignal: `INSERT INTO signals (session, pair, direction, initial_time, telegram_id) VALUES ($1, $2, $3, $4, $5)`,
             updateSignalResult: `UPDATE signals SET result = $1 WHERE time_stamp = (SELECT time_stamp FROM signals WHERE telegram_id = $2 ORDER BY time_stamp DESC LIMIT 1)`,
