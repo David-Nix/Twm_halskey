@@ -149,6 +149,14 @@ class Session {
                 percentage: `${(per * 100).toFixed(2)}%`
             };
         };
+        this.getDayFormatted = (date = null) => {
+            const today = date ? new Date(date) : new Date();
+            const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            const dayOfMonth = today.getDate();
+            const ordinalSuffix = (n) => ['th', 'st', 'nd', 'rd'][((n % 100) - 20) % 10] || 'th';
+            return `${daysOfWeek[today.getDay()]}, ${months[today.getMonth()]} ${dayOfMonth}${ordinalSuffix(dayOfMonth)}, ${today.getFullYear()}`;
+        };
         this.sendSessionEndMessage = (presentSession, historyDB) => __awaiter(this, void 0, void 0, function* () {
             try {
                 const sessionEndPhotoPath = join(__dirname, "./media/imgs/brand/session_end.jpg");
@@ -174,11 +182,6 @@ class Session {
                     default:
                         break;
                 }
-                const accuracyPercentage = (wins, losses) => {
-                    const totalSignals = wins + losses;
-                    const per = wins / totalSignals;
-                    return `${(per * 100).toFixed(2)}%`;
-                };
                 let SESSION_END_MSG = `<strong>📝 REPORT</strong>\n`;
                 SESSION_END_MSG += `<strong>${sessionIcon} ${presentSession} SESSION</strong>\n\n`;
                 SESSION_END_MSG += `<blockquote>`;
@@ -187,7 +190,8 @@ class Session {
                 });
                 SESSION_END_MSG += `</blockquote>\n`;
                 SESSION_END_MSG += `<strong>${(sessionManager.returnEmoji(sessionResult.wins.toString()))} ${(sessionResult.wins > 1) ? "WINS" : "WIN"} - ${(sessionManager.returnEmoji(sessionResult.losses.toString()))} ${(sessionResult.losses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
-                SESSION_END_MSG += `<strong>❇️ Accuracy: ${accuracyPercentage(sessionResult.wins, sessionResult.losses)}</strong>\n\n`;
+                const accuracy = this.getSessionAccuracy(sessionResult.wins, sessionResult.losses);
+                SESSION_END_MSG += `<strong>❇️ Accuracy: ${accuracy.percentage}</strong>\n\n`;
                 SESSION_END_MSG += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
                 bot.sendPhoto(channelId, sessionEndPhotoStream, {
                     parse_mode: "HTML",
@@ -289,14 +293,6 @@ class Session {
                     MORNING: 'MORNING SESSION',
                     AFTERNOON: 'AFTERNOON SESSION'
                 };
-                const getDayFormatted = () => {
-                    const today = new Date();
-                    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-                    const dayOfMonth = today.getDate();
-                    const ordinalSuffix = (n) => ['th', 'st', 'nd', 'rd'][((n % 100) - 20) % 10] || 'th';
-                    return `${daysOfWeek[today.getDay()]}, ${months[today.getMonth()]} ${dayOfMonth}${ordinalSuffix(dayOfMonth)}, ${today.getFullYear()}`;
-                };
                 let tWins = 0;
                 let tLosses = 0;
                 const countWinsAndLosses = (history) => {
@@ -312,14 +308,9 @@ class Session {
                     tWins += wins;
                     tLosses += losses;
                 };
-                const accuracyPercentage = (wins, losses) => {
-                    const totalSignals = wins + losses;
-                    const per = wins / totalSignals;
-                    return `${(per * 100).toFixed(2)}%`;
-                };
                 countWinsAndLosses(dayHistory);
                 let mts = `<strong>🧾 DAILY REPORT</strong>\n`;
-                mts += `<strong>🗓 ${getDayFormatted()}</strong>\n\n`;
+                mts += `<strong>🗓 ${this.getDayFormatted()}</strong>\n\n`;
                 mts += `<pre>\n`;
                 Object.keys(sessions).forEach(session => {
                     mts += `<strong>${sessions[session]}</strong>\n<strong><code>➖➖➖➖➖➖➖➖➖➖➖➖➖➖➖</code></strong>\n`;
@@ -331,7 +322,8 @@ class Session {
                 });
                 mts += `</pre>\n`;
                 mts += `<strong>${sessionManager.returnEmoji(tWins.toString())} ${(tWins > 1) ? "WINS" : "WIN"} - ${sessionManager.returnEmoji(tLosses.toString())} ${(tLosses > 1) ? "LOSSES" : "LOSS"}</strong>\n\n`;
-                mts += `<strong>❇️ Accuracy: ${accuracyPercentage(tWins, tLosses)}</strong>\n\n`;
+                const accuracy = this.getSessionAccuracy(tWins, tLosses);
+                mts += `<strong>❇️ Accuracy: ${accuracy.percentage}</strong>\n\n`;
                 mts += `<strong>JOIN THE NEXT TRADE SESSION CLICK THE LINK BELOW 👇</strong>`;
                 bot.deleteMessage(chatId, sentMessage.message_id)
                     .then(() => __awaiter(this, void 0, void 0, function* () {
@@ -350,6 +342,63 @@ class Session {
                     }));
                 }));
             }));
+        });
+        this.analysePastWeek = () => __awaiter(this, void 0, void 0, function* () {
+            console.log("Getting all signals from the past 7 days...");
+            const weekSignals = yield db.getWeekSignals();
+            let daysSorter = {};
+            let totalWins = 0;
+            let totalLosses = 0;
+            weekSignals.forEach((signal) => {
+                const dateFormatted = this.getDayFormatted(signal.time_stamp);
+                if (dateFormatted in daysSorter) {
+                    daysSorter[dateFormatted].push(signal);
+                }
+                else {
+                    daysSorter[dateFormatted] = [signal];
+                }
+            });
+            console.log("");
+            console.log("___________________________");
+            console.log("Generating weekly report...");
+            let mts = `<strong>🧾 #WEEKLYSUMMARY</strong>\n\n`;
+            mts += `🗓 FROM: <strong>${Object.keys(daysSorter).at(0)}.</strong>\n`;
+            mts += `🗓 TO: <strong>${Object.keys(daysSorter).at(-1)}.</strong>\n\n`;
+            console.log("");
+            console.log(`FROM: ${Object.keys(daysSorter).at(0)}`);
+            console.log(`TO: ${Object.keys(daysSorter).at(-1)}`);
+            console.log("");
+            mts += `<pre>`;
+            Object.keys(daysSorter).forEach(day => {
+                const daySignals = daysSorter[day];
+                mts += `<strong>${day}.</strong>\n`;
+                mts += `<strong>➖➖➖➖➖➖➖➖➖➖➖➖➖</strong>\n`;
+                let dayWins = 0;
+                let dayLosses = 0;
+                daySignals.forEach((signal) => {
+                    if (signal.result && signal.result.includes("WIN")) {
+                        dayWins += 1;
+                        totalWins += 1;
+                    }
+                    else {
+                        dayLosses += 1;
+                        totalLosses += 1;
+                    }
+                });
+                mts += `<strong>✅ Wins ${this.returnEmoji(dayWins.toString())} x ${this.returnEmoji(dayLosses.toString())} Losses ❌</strong>\n`;
+                const accuracy = this.getSessionAccuracy(dayWins, dayLosses);
+                mts += `<strong>❇️ Accuracy: ${accuracy.percentage}</strong>\n\n`;
+            });
+            mts += `</pre>\n`;
+            mts += `<strong>🥇 <u>OVERALL WEEKLY PERFORMANCE</u></strong>\n`;
+            mts += `<strong>➖➖➖➖➖➖➖➖➖➖➖➖➖</strong>\n`;
+            mts += `✅ Total Wins: ${totalWins}\n`;
+            mts += `❌ Total Losses: ${totalLosses}\n\n`;
+            const weekAccuracy = this.getSessionAccuracy(totalWins, totalLosses);
+            mts += `🎯 Weekly Accuracy: ${weekAccuracy.percentage}`;
+            console.log(`Week's Accuracy: ${weekAccuracy.percentage}`);
+            console.log("___________________________");
+            return mts;
         });
         this.scheduleClimaxCrons = () => __awaiter(this, void 0, void 0, function* () {
             console.log("Will schedule all Channel crons...");
@@ -1314,10 +1363,29 @@ bot.onText(/\/endday/, (msg) => __awaiter(void 0, void 0, void 0, function* () {
     const chatId = (_a = msg.from) === null || _a === void 0 ? void 0 : _a.id;
     sessionManager.endDay(chatId);
 }));
+bot.onText(/\/reportweek/, (msg) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const chatId = (_a = msg.from) === null || _a === void 0 ? void 0 : _a.id;
+    let messageId = 0;
+    yield bot.sendMessage(chatId, "Please wait...")
+        .then(sentMsg => {
+        messageId = sentMsg.message_id;
+    });
+    const weekReportText = yield sessionManager.analysePastWeek();
+    yield bot.sendMessage(channelId, weekReportText, {
+        parse_mode: "HTML"
+    })
+        .then(sentMsg => {
+        bot.editMessageText("Weekly report sent successfully", {
+            chat_id: chatId,
+            message_id: messageId
+        });
+    });
+}));
 sessionManager.scheduleClimaxCrons();
 app.get("/", (req, res) => {
-    res.send("Halskey v2.3.0 for TWM is running...");
+    res.send("Halskey v2.4.0 for TWM is running...");
 });
 app.listen(port, () => {
-    console.log("Halskey v2.3.0 for TWM is running...");
+    console.log("Halskey v2.4.0 for TWM is running...");
 });
